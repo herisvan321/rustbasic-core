@@ -35,18 +35,17 @@ pub fn router() -> Router<AppState> {
 
     // 2. Update src/routes/mod.rs
     let routes_mod_path = "src/routes/mod.rs";
-    if let Ok(mut content) = fs::read_to_string(routes_mod_path) {
-        if !content.contains("pub mod auth;") {
+    if let Ok(mut content) = fs::read_to_string(routes_mod_path)
+        && !content.contains("pub mod auth;") {
             content.push_str("pub mod auth;\n");
             fs::write(routes_mod_path, content).ok();
             println!("   {} {}", "📝 Updated:".blue(), routes_mod_path.cyan());
         }
-    }
 
     // 3. Update src/routes/web.rs
     let web_route_path = "src/routes/web.rs";
-    if let Ok(mut content) = fs::read_to_string(web_route_path) {
-        if !content.contains("use crate::routes::auth as auth_routes;") {
+    if let Ok(mut content) = fs::read_to_string(web_route_path)
+        && !content.contains("use crate::routes::auth as auth_routes;") {
             content = content.replace("use rustbasic_core::axum::{Router, routing::get};", "use rustbasic_core::axum::{Router, routing::{get, post}, middleware::from_fn};");
             content = content.replace("use rustbasic_core::server::AppState;", "use crate::app::http::controllers::{auth, dashboard_controller};\nuse crate::app::http::middleware::auth::auth_middleware;\nuse rustbasic_core::server::AppState;\nuse crate::routes::auth as auth_routes;");
 
@@ -73,7 +72,6 @@ pub fn router() -> Router<AppState> {
             fs::write(web_route_path, content).ok();
             println!("   {} {}", "📝 Updated:".blue(), web_route_path.cyan());
         }
-    }
 
     // 3.1 Create Password Resets Migration
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -84,34 +82,33 @@ pub fn router() -> Router<AppState> {
     let mut exists = false;
     if let Ok(entries) = std::fs::read_dir("database/migrations") {
         for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.ends_with("_create_password_resets_table.rs") {
+            if let Some(name) = entry.file_name().to_str()
+                && name.ends_with("_create_password_resets_table.rs") {
                     exists = true;
                     println!("   {} {}", "⚠️  Exists:".yellow(), name.cyan());
                     break;
                 }
-            }
         }
     }
 
     if !exists {
-        let migration_template = format!(r#"use sea_orm_migration::prelude::*;
+        let migration_template = r#"use sea_orm_migration::prelude::*;
 use async_trait::async_trait;
 
 #[derive(Iden)]
-enum PasswordResets {{
+enum PasswordResets {
     Table,
     Email,
     Token,
     CreatedAt,
-}}
+}
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
 
 #[async_trait]
-impl MigrationTrait for Migration {{
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {{
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .create_table(
                 Table::create()
@@ -128,15 +125,15 @@ impl MigrationTrait for Migration {{
                     .to_owned(),
             )
             .await
-    }}
+    }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {{
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(PasswordResets::Table).to_owned())
             .await
-    }}
-}}
-"#);
+    }
+}
+"#.to_string();
         fs::write(&migration_path, migration_template).ok();
         
         super::scaffolding::update_migration_mod_rs(&migration_name);
@@ -186,12 +183,11 @@ pub async fn guest_middleware(req: Request, next: Next) -> impl IntoResponse {
         
         // Update src/app/http/middleware/mod.rs
         let middleware_mod_path = "src/app/http/middleware/mod.rs";
-        if let Ok(mut content) = fs::read_to_string(middleware_mod_path) {
-            if !content.contains("pub mod auth;") {
+        if let Ok(mut content) = fs::read_to_string(middleware_mod_path)
+            && !content.contains("pub mod auth;") {
                 content.push_str("pub mod auth;\n");
                 fs::write(middleware_mod_path, content).ok();
             }
-        }
         println!("   {} {}", "✅ Created:".green(), auth_middleware_path.cyan());
     }
 
@@ -219,12 +215,11 @@ impl ActiveModelBehavior for ActiveModel {}
         
         // Update src/app/models/mod.rs
         let models_mod_path = "src/app/models/mod.rs";
-        if let Ok(mut content) = fs::read_to_string(models_mod_path) {
-            if !content.contains("pub mod password_resets;") {
+        if let Ok(mut content) = fs::read_to_string(models_mod_path)
+            && !content.contains("pub mod password_resets;") {
                 content.push_str("pub mod password_resets;\n");
                 fs::write(models_mod_path, content).ok();
             }
-        }
         println!("   {} {}", "✅ Created:".green(), "Model password_resets".cyan());
     }
 
@@ -1022,13 +1017,12 @@ pub async fn remove_auth() {
 
     // 2. Update src/routes/mod.rs
     let routes_mod_path = "src/routes/mod.rs";
-    if let Ok(mut content) = fs::read_to_string(routes_mod_path) {
-        if content.contains("pub mod auth;") {
+    if let Ok(mut content) = fs::read_to_string(routes_mod_path)
+        && content.contains("pub mod auth;") {
             content = content.replace("pub mod auth;\n", "");
             fs::write(routes_mod_path, content).ok();
             println!("   {} {}", "📝 Updated:".blue(), routes_mod_path.cyan());
         }
-    }
 
     // 3. Update src/routes/web.rs
     let web_route_path = "src/routes/web.rs";
@@ -1102,13 +1096,12 @@ pub async fn remove_auth() {
     // 7.1 Delete Password Resets Migration & Model
     if let Ok(entries) = std::fs::read_dir("database/migrations") {
         for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.ends_with("_create_password_resets_table.rs") {
+            if let Some(name) = entry.file_name().to_str()
+                && name.ends_with("_create_password_resets_table.rs") {
                     let path = entry.path();
                     fs::remove_file(&path).ok();
                     println!("   {} {}", "✅ Deleted:".green(), path.display().to_string().cyan());
                 }
-            }
         }
     }
     
@@ -1133,13 +1126,12 @@ pub async fn remove_auth() {
     }
 
     let middleware_mod_path = "src/app/http/middleware/mod.rs";
-    if let Ok(mut content) = fs::read_to_string(middleware_mod_path) {
-        if content.contains("pub mod auth;") {
+    if let Ok(mut content) = fs::read_to_string(middleware_mod_path)
+        && content.contains("pub mod auth;") {
             content = content.replace("pub mod auth;\n", "");
             fs::write(middleware_mod_path, content).ok();
             println!("   {} {}", "📝 Updated:".blue(), middleware_mod_path.cyan());
         }
-    }
 
     // 6. Delete Dashboard Controller
     let dashboard_path = "src/app/http/controllers/dashboard_controller.rs";
@@ -1168,14 +1160,13 @@ pub async fn remove_auth() {
 
     // 7.2 Update src/app/models/mod.rs
     let models_mod_path = "src/app/models/mod.rs";
-    if let Ok(mut content) = fs::read_to_string(models_mod_path) {
-        if content.contains("pub mod password_resets;") {
+    if let Ok(mut content) = fs::read_to_string(models_mod_path)
+        && content.contains("pub mod password_resets;") {
             content = content.replace("pub mod password_resets;\n", "");
             content = content.replace("pub mod password_resets;", "");
             fs::write(models_mod_path, content).ok();
             println!("   {} {}", "📝 Updated:".blue(), models_mod_path.cyan());
         }
-    }
 
     // 7.3 Update database/migrations/mod.rs
     let migration_mod_path = "database/migrations/mod.rs";
@@ -1185,10 +1176,7 @@ pub async fn remove_auth() {
         
         // Remove the mod line
         lines.retain(|line| {
-            if line.contains("_create_password_resets_table;") {
-                changed = true;
-                false
-            } else if line.contains("Box::new(") && line.contains("_create_password_resets_table::Migration") {
+            if line.contains("_create_password_resets_table;") || (line.contains("Box::new(") && line.contains("_create_password_resets_table::Migration")) {
                 changed = true;
                 false
             } else {

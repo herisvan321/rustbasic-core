@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
-use minijinja::{Environment, context};
+use minijinja::Environment;
 use chrono::DateTime;
 use chrono_humanize::HumanTime;
 use chrono_tz::Tz;
@@ -16,14 +16,8 @@ use crate::requests::Request as AppRequest;
 use crate::Config;
 use serde_json::{json, Value};
 use regex::Regex;
-use rust_embed::RustEmbed;
 
-// 1. Embedded Views (Templates)
-#[derive(RustEmbed)]
-#[folder = "resources/views/"]
-struct EmbeddedViews;
-
-// 2. Load Static Assets into Memory
+// 1. Load Static Assets into Memory
 static HTMX_SRC: LazyLock<String> = LazyLock::new(|| {
     include_str!("../resources/js/htmx.min.js").to_string()
 });
@@ -33,28 +27,16 @@ static CSS_SRC: LazyLock<String> = LazyLock::new(|| {
 });
 
 
-// 3. Setup Engine Template (Minijinja)
+// 2. Setup Engine Template (Minijinja)
 pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
     let mut env = Environment::new();
     
-    // Custom Loader Hybrid (Disk for Debug, Memory for Release)
+    // Default Loader: Mencari di disk
     env.set_loader(|name| {
-        // 1. Cek di disk (hanya dalam mode debug untuk live-reload)
-        #[cfg(debug_assertions)]
-        {
-            let path = format!("src/resources/views/{}", name);
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                return Ok(Some(content));
-            }
+        let path = format!("src/resources/views/{}", name);
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            return Ok(Some(content));
         }
-        
-        // 2. Cek di Embedded Memory (Fallback atau Mode Release)
-        if let Some(file) = EmbeddedViews::get(name) {
-            if let Ok(content) = std::str::from_utf8(file.data.as_ref()) {
-                return Ok(Some(content.to_string()));
-            }
-        }
-
         Ok(None)
     });
 
@@ -103,7 +85,7 @@ pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
     env
 });
 
-// 4. Fungsi Helper untuk Render HTML Statis
+// 3. Fungsi Helper untuk Render HTML Statis
 pub fn render(template: &str, context: minijinja::Value) -> Response {
     render_internal(template, context)
 }
@@ -115,7 +97,7 @@ pub fn render_to_string(template: &str, context: minijinja::Value) -> String {
     }
 }
 
-// 5. Fungsi Helper untuk Render dengan Session
+// 4. Fungsi Helper untuk Render dengan Session
 pub fn view(req: &AppRequest, template: &str, ctx: minijinja::Value) -> Response {
     let mut ctx_value = serde_json::to_value(&ctx).unwrap_or_else(|_| json!({}));
     
@@ -164,12 +146,10 @@ fn render_internal(template: &str, context: minijinja::Value) -> Response {
     match JINJA.get_template(template) {
         Ok(tmpl) => match tmpl.render(context.clone()) {
             Ok(rendered) => {
-                // --- LOGIKA MINIFIKASI (Sembunyikan Source Code) ---
-                // 1. Hapus komentar HTML
+                // --- LOGIKA MINIFIKASI ---
                 let re_comments = Regex::new(r"(?s)<!--.*?-->").unwrap();
                 let without_comments = re_comments.replace_all(&rendered, "");
                 
-                // 2. Gabungkan baris dan hapus spasi berlebih untuk menyulitkan view-source
                 let minified = without_comments
                     .lines()
                     .map(|line| line.trim())
@@ -183,70 +163,20 @@ fn render_internal(template: &str, context: minijinja::Value) -> Response {
                 tracing::error!("Gagal render template: {}", err);
                 
                 if cfg.app_debug {
-                    match JINJA.get_template("errors/debug.rb.html") {
-                        Ok(debug_tmpl) => {
-                            let debug_ctx = context! {
-                                code => 500,
-                                title => "Template Render Error",
-                                error_detail => err.to_string(),
-                                template_name => template,
-                                env => "local",
-                                now => chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
-                            };
-                            match debug_tmpl.render(debug_ctx) {
-                                Ok(rendered) => return Html(rendered).into_response(),
-                                Err(e) => {
-                                    tracing::error!("Gagal render debug template: {}", e);
-                                    return (StatusCode::INTERNAL_SERVER_ERROR, "Critical Debug Render Error").into_response();
-                                }
-                            }
-                        },
-                        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Debug Template Missing").into_response(),
-                    }
+                    return (StatusCode::INTERNAL_SERVER_ERROR, format!("Render Error: {}", err)).into_response();
                 }
 
-                match JINJA.get_template("errors/minimal.rb.html") {
-                    Ok(tmpl) => match tmpl.render(context! { code => 500, title => "Server Error", message => "Terjadi kesalahan saat memproses tampilan." }) {
-                        Ok(rendered) => Html(rendered).into_response(),
-                        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Critical Render Error").into_response(),
-                    },
-                    Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response(),
-                }
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
         },
         Err(err) => {
             tracing::error!("Template tidak ditemukan: {}", err);
 
             if cfg.app_debug {
-                match JINJA.get_template("errors/debug.rb.html") {
-                    Ok(debug_tmpl) => {
-                        let debug_ctx = context! {
-                            code => 404,
-                            title => "Template Not Found",
-                            error_detail => err.to_string(),
-                            template_name => template,
-                            env => "local",
-                            now => chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
-                        };
-                        match debug_tmpl.render(debug_ctx) {
-                            Ok(rendered) => return Html(rendered).into_response(),
-                            Err(e) => {
-                                tracing::error!("Gagal render debug template: {}", e);
-                                return (StatusCode::NOT_FOUND, "Critical Debug Render Error").into_response();
-                            }
-                        }
-                    },
-                    Err(_) => return (StatusCode::NOT_FOUND, "Debug Template Missing").into_response(),
-                }
+                return (StatusCode::NOT_FOUND, format!("Template Not Found: {}", err)).into_response();
             }
 
-            match JINJA.get_template("errors/minimal.rb.html") {
-                Ok(tmpl) => match tmpl.render(context! { code => 404, title => "Page Not Found", message => "Halaman atau template tidak ditemukan." }) {
-                    Ok(rendered) => Html(rendered).into_response(),
-                    Err(_) => (StatusCode::NOT_FOUND, "Not Found").into_response(),
-                },
-                Err(_) => (StatusCode::NOT_FOUND, "Not Found").into_response(),
-            }
+            (StatusCode::NOT_FOUND, "Not Found").into_response()
         }
     }
 }

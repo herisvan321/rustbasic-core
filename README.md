@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustbasic-core = "0.0.1"
+rustbasic-core = "0.0.3"
 ```
 
 ## 🚀 Quick Start
@@ -47,7 +47,7 @@ async fn main() {
 
 ## 📖 Documentation
 
-For full documentation and the starter template, visit the main [RustBasic Repository](https://github.com/yourusername/rustbasic).
+For full documentation and the starter template, visit the main [RustBasic Repository](https://github.com/herisvan321/rustbasic).
 
 ## 📄 License
 

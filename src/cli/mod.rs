@@ -18,7 +18,6 @@ where
     F: Fn(String) -> Pin<Box<dyn Future<Output = Result<(), String>>>>,
     G: Fn() -> Pin<Box<dyn Future<Output = ()>>>
 {
-    dotenv().expect("❌ Error: File .env tidak ditemukan! Silakan salin .env.example menjadi .env sebelum menggunakan CLI.");
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -27,6 +26,11 @@ where
     }
 
     let command = &args[1];
+
+    // .env hanya diwajibkan untuk perintah selain 'new'
+    if command != "new" {
+        let _ = dotenv(); // Coba muat .env jika ada
+    }
 
     match command.as_str() {
          "serve" => {
@@ -127,6 +131,42 @@ where
             }
             scaffolding::make_seeder(&args[2]);
         }
+        "new" => {
+            if args.len() < 3 {
+                println!("{}", "❌ Error: Nama project tidak ditentukan.".red().bold());
+                println!("Contoh: rustbasic new myapp");
+                return;
+            }
+            let project_name = &args[2];
+
+            // Cek apakah folder sudah ada
+            if std::path::Path::new(project_name).exists() {
+                println!("{} '{}' {}", "❌ Error: Folder".red().bold(), project_name.yellow(), "sudah ada! Silakan gunakan nama lain.".red().bold());
+                return;
+            }
+
+            println!("\n✨ {} {}", "Membuat project baru:".bold(), project_name.cyan().bold());
+            
+            let status = std::process::Command::new("git")
+                .args(["clone", "https://github.com/herisvan321/rustbasic", project_name])
+                .status();
+
+            match status {
+                Ok(s) if s.success() => {
+                    // Hapus folder .git agar menjadi project baru
+                    let _ = std::process::Command::new("rm")
+                        .args(["-rf", &format!("{}/.git", project_name)])
+                        .status();
+                    
+                    println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Silakan masuk ke folder:".dimmed());
+                    println!("   cd {}", project_name.cyan());
+                    println!("   rustbasic serve\n");
+                }
+                _ => {
+                    println!("{}", "❌ Gagal mengkloning starter template. Pastikan Anda memiliki koneksi internet dan git terinstall.".red());
+                }
+            }
+        }
         "auth:back" => {
             auth::remove_auth().await;
         }
@@ -142,24 +182,25 @@ fn print_help() {
     println!("\n{}", "🛠️  RustBasic CLI".magenta().bold());
     println!("{}", "=================".magenta());
     println!("{}", "Penggunaan:".bold());
-    println!("  {} {} <Nama> [-m]   {}", "cargo rustbasic".blue(), "make:model".green(), "Membuat model Sea-ORM (dan migration Rust)".dimmed());
-    println!("  {} {} <Nama>    {}", "cargo rustbasic".blue(), "make:migration".green(), "Membuat file migration Rust".dimmed());
-    println!("  {} {} <Nama>  {}", "cargo rustbasic".blue(), "make:controller".green(), "Membuat controller Axum".dimmed());
-    println!("  {} {} <Nama>  {}", "cargo rustbasic".blue(), "make:middleware".green(), "Membuat middleware Axum".dimmed());
-    println!("  {} {}                  {}", "cargo rustbasic".blue(), "migrate".green(), "Menjalankan migrasi database (Sea-ORM)".dimmed());
-    println!("  {} {}          {}", "cargo rustbasic".blue(), "migrate:refresh".green(), "Rollback semua dan jalankan kembali migrasi".dimmed());
-    println!("  {} {}             {}", "cargo rustbasic".blue(), "migrate:back".green(), "Membatalkan migrasi terakhir (Rollback)".dimmed());
-    println!("  {} {}               {}", "cargo rustbasic".blue(), "route:list".green(), "Menampilkan daftar route".dimmed());
-    println!("  {} {}                    {}", "cargo rustbasic".blue(), "build".green(), "Membangun project dengan pilihan".dimmed());
-    println!("  {} {}             {}", "cargo rustbasic".blue(), "check:update".green(), "Cek versi terbaru paket (dependencies)".dimmed());
-    println!("  {} {}           {}", "cargo rustbasic".blue(), "check:security".green(), "Audit keamanan aplikasi".dimmed());
-    println!("  {} {}               {}", "cargo rustbasic".blue(), "cache:clear".green(), "Membersihkan logs dan database sessions".dimmed());
-    println!("  {} {}             {}", "cargo rustbasic".blue(), "key:generate".green(), "Membuat APP_KEY baru di file .env".dimmed());
-    println!("  {} {}                   {}", "cargo rustbasic".blue(), "make:auth".green(), "Scaffold autentikasi (Login/Register)".dimmed());
-    println!("  {} {}                   {}", "cargo rustbasic".blue(), "auth:back".red(), "Menghapus semua scaffolding autentikasi".dimmed());
-    println!("  {} {}                  {}", "cargo rustbasic".blue(), "db:seed".green(), "Menjalankan seeder database".dimmed());
-    println!("  {} {} <Nama>    {}", "cargo rustbasic".blue(), "make:seeder".green(), "Membuat file seeder baru".dimmed());
-    println!("  {} {}                    {}", "cargo rustbasic".blue(), "serve".green(), "Menjalankan server dengan Auto-Reload".dimmed());
+    println!("  {} {} <Nama>         {}", "rustbasic".blue(), "new".green(), "Membuat project RustBasic baru dari template".dimmed());
+    println!("  {} {} <Nama> [-m]   {}", "rustbasic".blue(), "make:model".green(), "Membuat model Sea-ORM (dan migration Rust)".dimmed());
+    println!("  {} {} <Nama>    {}", "rustbasic".blue(), "make:migration".green(), "Membuat file migration Rust".dimmed());
+    println!("  {} {} <Nama>  {}", "rustbasic".blue(), "make:controller".green(), "Membuat controller Axum".dimmed());
+    println!("  {} {} <Nama>  {}", "rustbasic".blue(), "make:middleware".green(), "Membuat middleware Axum".dimmed());
+    println!("  {} {}                  {}", "rustbasic".blue(), "migrate".green(), "Menjalankan migrasi database (Sea-ORM)".dimmed());
+    println!("  {} {}          {}", "rustbasic".blue(), "migrate:refresh".green(), "Rollback semua dan jalankan kembali migrasi".dimmed());
+    println!("  {} {}             {}", "rustbasic".blue(), "migrate:back".green(), "Membatalkan migrasi terakhir (Rollback)".dimmed());
+    println!("  {} {}               {}", "rustbasic".blue(), "route:list".green(), "Menampilkan daftar route".dimmed());
+    println!("  {} {}                    {}", "rustbasic".blue(), "build".green(), "Membangun project dengan pilihan".dimmed());
+    println!("  {} {}             {}", "rustbasic".blue(), "check:update".green(), "Cek versi terbaru paket (dependencies)".dimmed());
+    println!("  {} {}           {}", "rustbasic".blue(), "check:security".green(), "Audit keamanan aplikasi".dimmed());
+    println!("  {} {}               {}", "rustbasic".blue(), "cache:clear".green(), "Membersihkan logs dan database sessions".dimmed());
+    println!("  {} {}             {}", "rustbasic".blue(), "key:generate".green(), "Membuat APP_KEY baru di file .env".dimmed());
+    println!("  {} {}                   {}", "rustbasic".blue(), "make:auth".green(), "Scaffold autentikasi (Login/Register)".dimmed());
+    println!("  {} {}                   {}", "rustbasic".blue(), "auth:back".red(), "Menghapus semua scaffolding autentikasi".dimmed());
+    println!("  {} {}                  {}", "rustbasic".blue(), "db:seed".green(), "Menjalankan seeder database".dimmed());
+    println!("  {} {} <Nama>    {}", "rustbasic".blue(), "make:seeder".green(), "Membuat file seeder baru".dimmed());
+    println!("  {} {}                    {}", "rustbasic".blue(), "serve".green(), "Menjalankan server dengan Auto-Reload".dimmed());
     println!("  {}                       {}", "cargo serve".blue(), "(Shortcut) Lebih cepat untuk menjalankan server".dimmed());
 
     println!();

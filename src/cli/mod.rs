@@ -110,17 +110,24 @@ where
                 println!("{}", "🔄 Menyegarkan database (Refresh Migration)...".yellow());
             } else if command == "migrate:back" || command == "migrate:rollback" {
                 println!("{}", "⏪ Membatalkan migrasi terakhir (Rollback 1 step)...".yellow());
+            } else {
+                println!("{}", "🚀 Menjalankan migrasi database...".cyan());
             }
             
-            if let Err(e) = migrate_fn(command.clone()).await {
-                eprintln!("\n{} {}", "❌ Error:".red().bold(), "Gagal menjalankan operasi database.".bold());
-                eprintln!("{} {}", "📝 Detail:".yellow(), e);
-                eprintln!("\n💡 {}", "Tips:".cyan().bold());
-                eprintln!("   Jika muncul error 'Migration file ... is missing', itu berarti database mencatat");
-                eprintln!("   migrasi yang sudah dijalankan, tapi file migrasinya sudah dihapus atau diubah.");
-                eprintln!("\n🛠️  {}", "Solusi:".cyan().bold());
-                eprintln!("   Hapus file database: 'rm database/rustbasic.sqlite' lalu jalankan migrasi lagi.");
-                std::process::exit(1);
+            match migrate_fn(command.clone()).await {
+                Ok(_) => {
+                    println!("\n{} {}", "✅".green(), format!("Operasi '{}' berhasil diselesaikan.", command).green().bold());
+                }
+                Err(e) => {
+                    eprintln!("\n{} {}", "❌ Error:".red().bold(), "Gagal menjalankan operasi database.".bold());
+                    eprintln!("{} {}", "📝 Detail:".yellow(), e);
+                    eprintln!("\n💡 {}", "Tips:".cyan().bold());
+                    eprintln!("   Jika muncul error 'Migration file ... is missing', itu berarti database mencatat");
+                    eprintln!("   migrasi yang sudah dijalankan, tapi file migrasinya sudah dihapus atau diubah.");
+                    eprintln!("\n🛠️  {}", "Solusi:".cyan().bold());
+                    eprintln!("   Hapus file database: 'rm database/rustbasic.sqlite' lalu jalankan migrasi lagi.");
+                    std::process::exit(1);
+                }
             }
         }
         "route:list" => {
@@ -128,15 +135,18 @@ where
         }
         "build" => {
             builder::build_project();
+            println!("\n{} {}", "✅".green(), "Build project berhasil diselesaikan.".green().bold());
         }
         "cache:clear" => {
             database::clear_cache().await;
         }
         "check:update" => {
             monitoring::check_updates();
+            println!("\n{} {}", "✅".green(), "Pemeriksaan update selesai.".green().bold());
         }
         "check:security" => {
             monitoring::check_security();
+            println!("\n{} {}", "✅".green(), "Audit keamanan selesai.".green().bold());
         }
         "key:generate" => {
             database::generate_app_key();
@@ -144,12 +154,16 @@ where
         "make:auth" | "auth" => {
             if args.len() >= 3 && args[2] == "back" {
                 auth::remove_auth().await;
+                println!("\n{} {}", "✅".green(), "Scaffolding autentikasi berhasil dihapus.".green().bold());
             } else {
                 auth::make_auth().await;
+                println!("\n{} {}", "✅".green(), "Scaffolding autentikasi berhasil dibuat.".green().bold());
             }
         }
         "db:seed" => {
+            println!("{}", "🌱 Menjalankan seeder database...".cyan());
             seed_fn().await;
+            println!("\n{} {}", "✅".green(), "Database seeding berhasil diselesaikan.".green().bold());
         }
         "make:seeder" => {
             if args.len() < 3 {

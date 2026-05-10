@@ -2,12 +2,12 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use chrono::Local;
 use colored::*;
-use super::utils::to_snake_case;
+use super::utils::{to_snake_case, to_pascal_case};
 
 pub fn make_controller(name: &str) {
-    let clean_name = name.replace("Controller", "");
-    let snake_name = to_snake_case(&clean_name);
-    let class_name = format!("{}Controller", clean_name);
+    let pascal_name = to_pascal_case(name).replace("Controller", "");
+    let snake_name = to_snake_case(&pascal_name);
+    let class_name = format!("{}Controller", pascal_name);
     let file_name = format!("{}_controller.rs", snake_name);
     let file_path = format!("src/app/http/controllers/{}", file_name);
 
@@ -159,7 +159,7 @@ impl ActiveModelBehavior for ActiveModel {{}}
     fs::write(&file_path, template).expect("Gagal membuat file model");
     println!("{} {}", "✅ Model dibuat:".green(), file_path.cyan());
 
-    update_mod_rs(name, &snake_name);
+    update_mod_rs(&to_pascal_case(name), &snake_name);
 }
 
 pub fn update_mod_rs(class_name: &str, snake_name: &str) {
@@ -196,8 +196,8 @@ pub fn make_rust_migration(name: &str) {
         return;
     }
 
-    let struct_name = name.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
-    let table_iden = format!("{}s", struct_name);
+    let pascal_name = to_pascal_case(name);
+    let table_iden = format!("{}s", pascal_name);
 
     let template = format!(
 r#"use sea_orm_migration::prelude::*;
@@ -291,9 +291,9 @@ pub fn update_migration_mod_rs(mod_name: &str) {
 }
 
 pub fn make_seeder(name: &str) {
-    let clean_name = name.replace("Seeder", "");
-    let snake_name = to_snake_case(&clean_name);
-    let class_name = format!("{}Seeder", clean_name);
+    let pascal_name = to_pascal_case(name).replace("Seeder", "");
+    let snake_name = to_snake_case(&pascal_name);
+    let class_name = format!("{}Seeder", pascal_name);
     let file_name = format!("{}_seeder.rs", snake_name);
     let file_path = format!("database/seeders/{}", file_name);
 

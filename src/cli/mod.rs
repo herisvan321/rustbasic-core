@@ -223,6 +223,13 @@ where
                             }
                         }
                     }
+
+                    // 3. Download Dependencies (cargo fetch)
+                    println!("📦 {} {}", "Mengunduh dependencies...".bold(), "(Ini hanya dilakukan sekali saat inisialisasi)".dimmed());
+                    let _ = std::process::Command::new("cargo")
+                        .args(["fetch"])
+                        .current_dir(project_name)
+                        .status();
                     
                     println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Silakan masuk ke folder:".dimmed());
                     println!("   cd {}", project_name.cyan());

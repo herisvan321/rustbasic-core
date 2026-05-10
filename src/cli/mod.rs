@@ -27,6 +27,33 @@ where
 
     let command = &args[1];
 
+    // Delegation: Jika kita di dalam project RustBasic dan menjalankan perintah 
+    // yang butuh kompilasi lokal (seperti migrate), delegasikan ke 'cargo run'.
+    // Ini memastikan migrasi lokal yang baru dibuat bisa terbaca.
+    let commands_to_delegate = [
+        "migrate", "migrate:refresh", "migrate:back", "migrate:rollback", 
+        "db:seed", "route:list", "build"
+    ];
+
+    if env::var("RUSTBASIC_LOCAL").is_err() 
+        && std::path::Path::new("Cargo.toml").exists() 
+        && commands_to_delegate.contains(&command.as_str()) 
+    {
+        let status = std::process::Command::new("cargo")
+            .args(["run", "-q", "--bin", "rustbasic-cli", "--"])
+            .args(&args[1..])
+            .env("RUSTBASIC_LOCAL", "true")
+            .status();
+
+        match status {
+            Ok(s) => std::process::exit(s.code().unwrap_or(0)),
+            Err(_) => {
+                // Jika gagal (mungkin bukan project RustBasic yang valid), 
+                // lanjutkan eksekusi menggunakan binary ini.
+            }
+        }
+    }
+
     // .env hanya diwajibkan untuk perintah selain 'new'
     if command != "new" {
         let _ = dotenv(); // Coba muat .env jika ada

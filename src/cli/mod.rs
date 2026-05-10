@@ -157,6 +157,27 @@ where
                     let _ = std::process::Command::new("rm")
                         .args(["-rf", &format!("{}/.git", project_name)])
                         .status();
+
+                    // Copy .env.example menjadi .env
+                    let env_example = format!("{}/.env.example", project_name);
+                    let env_file = format!("{}/.env", project_name);
+                    if std::path::Path::new(&env_example).exists() {
+                        match std::fs::copy(&env_example, &env_file) {
+                            Ok(_) => println!("   {} .env.example → .env", "📋".blue()),
+                            Err(e) => println!("   {} Gagal menyalin .env: {}", "⚠️".yellow(), e),
+                        }
+                    }
+
+                    // Generate APP_KEY di dalam folder project baru
+                    if std::path::Path::new(&env_file).exists() {
+                        let current_dir = std::env::current_dir().ok();
+                        if std::env::set_current_dir(project_name).is_ok() {
+                            database::generate_app_key();
+                            if let Some(prev_dir) = current_dir {
+                                let _ = std::env::set_current_dir(prev_dir);
+                            }
+                        }
+                    }
                     
                     println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Silakan masuk ke folder:".dimmed());
                     println!("   cd {}", project_name.cyan());

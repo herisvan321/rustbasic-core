@@ -60,7 +60,11 @@ where
     }
 
     match command.as_str() {
-         "serve" => {
+        "-v" | "--version" | "version" => {
+            println!("{} {}", "🛠️  RustBasic CLI Version:".magenta().bold(), env!("CARGO_PKG_VERSION").cyan().bold());
+            return;
+        }
+        "serve" => {
             println!("\n   {} {}", "🚀".bold(), "Menjalankan server RustBasic dengan Auto-Reload...".magenta().bold());
             let status = std::process::Command::new("cargo")
                 .args(["watch", "-c", "-q", "--no-ignore", "-i", "target", "-w", "src", "-w", ".env", "-w", "src/resources", "-x", "run"])
@@ -262,8 +266,10 @@ fn print_help() {
     println!("  {} {}                   {}", "rustbasic".blue(), "auth:back".red(), "Menghapus semua scaffolding autentikasi".dimmed());
     println!("  {} {}                  {}", "rustbasic".blue(), "db:seed".green(), "Menjalankan seeder database".dimmed());
     println!("  {} {} <Nama>    {}", "rustbasic".blue(), "make:seeder".green(), "Membuat file seeder baru".dimmed());
-    println!("  {} {}                    {}", "rustbasic".blue(), "serve".green(), "Menjalankan server dengan Auto-Reload".dimmed());
-    println!("  {}                       {}", "cargo serve".blue(), "(Shortcut) Lebih cepat untuk menjalankan server".dimmed());
+    println!("  {} {}                   {}", "rustbasic".blue(), "serve".green(), "Menjalankan server dengan Auto-Reload".dimmed());
+    println!("  {} {}                 {}", "rustbasic".blue(), "version".green(), "Menampilkan versi CLI saat ini".dimmed());
+    println!("  {} {}                      {}", "rustbasic".blue(), "-v".green(), "Shortcut untuk menampilkan versi".dimmed());
+    println!("  {} {}                  {}", "rustbasic".blue(), "cargo serve".green(), "(Shortcut) Lebih cepat untuk menjalankan server".dimmed());
 
     println!();
 }

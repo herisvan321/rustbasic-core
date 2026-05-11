@@ -67,8 +67,14 @@ where
         "serve" => {
             println!("\n   {} {}", "🚀".bold(), "Menjalankan server RustBasic dengan Auto-Reload...".magenta().bold());
             
-            // Ambil APP_URL dari .env (sudah dimuat oleh dotenv() di awal)
-            let app_url = env::var("APP_URL").unwrap_or_else(|_| "http://localhost:4000".to_string());
+            // Ambil HOST dan PORT dari .env
+            let host = env::var("APP_HOST").unwrap_or_else(|_| "localhost".to_string());
+            let port = env::var("APP_PORT").unwrap_or_else(|_| "4000".to_string());
+            
+            // Jika host adalah 0.0.0.0, gunakan localhost untuk membuka browser
+            let display_host = if host == "0.0.0.0" { "localhost".to_string() } else { host };
+            let app_url = format!("http://{}:{}", display_host, port);
+            
             utils::wait_and_open(app_url);
 
             let status = std::process::Command::new("cargo")
@@ -231,13 +237,19 @@ where
                             
                             println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Menyiapkan server...".dimmed());
                             
-                            // Ambil APP_URL dari .env untuk dibuka di browser
-                            let app_url = std::fs::read_to_string(".env")
-                                .unwrap_or_default()
-                                .lines()
-                                .find(|line| line.starts_with("APP_URL="))
-                                .map(|line| line.replace("APP_URL=", ""))
-                                .unwrap_or_else(|| "http://localhost:4000".to_string());
+                            // Ambil HOST dan PORT dari .env untuk dibuka di browser
+                            let env_content = std::fs::read_to_string(".env").unwrap_or_default();
+                            let host = env_content.lines()
+                                .find(|line| line.starts_with("APP_HOST="))
+                                .map(|line| line.replace("APP_HOST=", ""))
+                                .unwrap_or_else(|| "localhost".to_string());
+                            let port = env_content.lines()
+                                .find(|line| line.starts_with("APP_PORT="))
+                                .map(|line| line.replace("APP_PORT=", ""))
+                                .unwrap_or_else(|| "4000".to_string());
+
+                            let display_host = if host == "0.0.0.0" { "localhost".to_string() } else { host };
+                            let app_url = format!("http://{}:{}", display_host, port);
 
                             // Open browser after compilation is ready
                             utils::wait_and_open(app_url);

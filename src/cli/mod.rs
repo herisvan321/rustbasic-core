@@ -213,27 +213,42 @@ where
                         }
                     }
 
-                    // Generate APP_KEY di dalam folder project baru
+                    // Generate APP_KEY dan jalankan server
                     if std::path::Path::new(&env_file).exists() {
-                        let current_dir = std::env::current_dir().ok();
                         if std::env::set_current_dir(project_name).is_ok() {
                             database::generate_app_key();
-                            if let Some(prev_dir) = current_dir {
-                                let _ = std::env::set_current_dir(prev_dir);
+
+                            // 3. Download Dependencies (cargo fetch)
+                            println!("📦 {} {}", "Mengunduh dependencies...".bold(), "(Ini hanya dilakukan sekali saat inisialisasi)".dimmed());
+                            let _ = std::process::Command::new("cargo")
+                                .args(["fetch"])
+                                .status();
+                            
+                            println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Menyiapkan server...".dimmed());
+                            
+                            // Ambil APP_URL dari .env untuk dibuka di browser
+                            let app_url = std::fs::read_to_string(".env")
+                                .unwrap_or_default()
+                                .lines()
+                                .find(|line| line.starts_with("APP_URL="))
+                                .map(|line| line.replace("APP_URL=", ""))
+                                .unwrap_or_else(|| "http://localhost:4000".to_string());
+
+                            // Open browser
+                            utils::open_browser(&app_url);
+
+                            // Jalankan serve (sama seperti perintah 'serve')
+                            println!("\n   {} {}", "🚀".bold(), "Menjalankan server RustBasic dengan Auto-Reload...".magenta().bold());
+                            let status = std::process::Command::new("cargo")
+                                .args(["watch", "-c", "-q", "--no-ignore", "-i", "target", "-w", "src", "-w", ".env", "-w", "src/resources", "-x", "run"])
+                                .status()
+                                .expect("❌ Gagal menjalankan cargo watch. Pastikan cargo-watch sudah terinstall: cargo install cargo-watch");
+                            
+                            if !status.success() {
+                                std::process::exit(status.code().unwrap_or(1));
                             }
                         }
                     }
-
-                    // 3. Download Dependencies (cargo fetch)
-                    println!("📦 {} {}", "Mengunduh dependencies...".bold(), "(Ini hanya dilakukan sekali saat inisialisasi)".dimmed());
-                    let _ = std::process::Command::new("cargo")
-                        .args(["fetch"])
-                        .current_dir(project_name)
-                        .status();
-                    
-                    println!("\n✅ {} {}", "Project berhasil dibuat!".green().bold(), "Silakan masuk ke folder:".dimmed());
-                    println!("   cd {}", project_name.cyan());
-                    println!("   rustbasic serve\n");
                 }
                 _ => {
                     println!("{}", "❌ Gagal mengkloning starter template. Pastikan Anda memiliki koneksi internet dan git terinstall.".red());

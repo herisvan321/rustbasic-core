@@ -23,3 +23,11 @@ pub fn to_pascal_case(s: &str) -> String {
     }
     pascal
 }
+
+pub fn open_browser(url: &str) {
+    let _ = match std::env::consts::OS {
+        "macos" => std::process::Command::new("open").arg(url).spawn(),
+        "windows" => std::process::Command::new("cmd").args(["/C", "start", url]).spawn(),
+        _ => std::process::Command::new("xdg-open").arg(url).spawn(),
+    };
+}

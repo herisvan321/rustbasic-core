@@ -73,5 +73,5 @@ fn print_banner() {
     ██║  ██║╚██████╔╝███████║   ██║   ██████╔╝██║  ██║███████║██║╚██████╗
     ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝
     "#);
-    println!("    >> RustBasic Monolith Framework - Version 2026 <<\n");
+    println!("    >> RustBasic Full-stack Framework - Version 2026 <<\n");
 }

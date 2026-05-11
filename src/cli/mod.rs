@@ -66,6 +66,11 @@ where
         }
         "serve" => {
             println!("\n   {} {}", "🚀".bold(), "Menjalankan server RustBasic dengan Auto-Reload...".magenta().bold());
+            
+            // Ambil APP_URL dari .env (sudah dimuat oleh dotenv() di awal)
+            let app_url = env::var("APP_URL").unwrap_or_else(|_| "http://localhost:4000".to_string());
+            utils::wait_and_open(app_url);
+
             let status = std::process::Command::new("cargo")
                 .args(["watch", "-c", "-q", "--no-ignore", "-i", "target", "-w", "src", "-w", ".env", "-w", "src/resources", "-x", "run"])
                 .status()
@@ -234,8 +239,8 @@ where
                                 .map(|line| line.replace("APP_URL=", ""))
                                 .unwrap_or_else(|| "http://localhost:4000".to_string());
 
-                            // Open browser
-                            utils::open_browser(&app_url);
+                            // Open browser after compilation is ready
+                            utils::wait_and_open(app_url);
 
                             // Jalankan serve (sama seperti perintah 'serve')
                             println!("\n   {} {}", "🚀".bold(), "Menjalankan server RustBasic dengan Auto-Reload...".magenta().bold());

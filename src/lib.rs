@@ -10,7 +10,6 @@ pub mod session_manager;
 pub mod errors;
 pub mod mail;
 pub mod seeder;
-pub mod cli;
 
 // Re-export Config agar bisa dipanggil dengan crate::Config
 pub use app::Config;

@@ -123,6 +123,34 @@ fn kill_port_if_in_use(port: u16) {
             .arg(format!("{}/tcp", port))
             .output();
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("cmd")
+            .args(&["/C", &format!("netstat -ano | findstr :{}", port)])
+            .output();
+
+        if let Ok(out) = output {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let mut found = false;
+            for line in stdout.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if let Some(pid) = parts.last() {
+                    if pid.parse::<u32>().is_ok() {
+                        tracing::warn!("Port {} sedang digunakan oleh PID {}. Membunuh proses...", port, pid);
+                        let _ = Command::new("taskkill")
+                            .args(&["/F", "/PID", pid])
+                            .output();
+                        found = true;
+                    }
+                }
+            }
+            if found {
+                // Beri waktu sejenak agar OS melepas port
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        }
+    }
 }
 
 /// Menangani error dari Rate Limiter (Governor) dengan tampilan HTML Premium

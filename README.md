@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustbasic-core = "0.1.8"
+rustbasic-core = "0.1.9"
 ```
 
 ## 🚀 Quick Start

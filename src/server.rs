@@ -1,5 +1,7 @@
-use axum::{Router, response::IntoResponse};
+use axum::{Router, response::IntoResponse, ServiceExt, handler::HandlerWithoutStateExt};
 use tower_http::services::ServeDir;
+use tower_http::normalize_path::NormalizePathLayer;
+use tower::Layer;
 use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, key_extractor::SmartIpKeyExtractor};
 use axum_session::{SessionLayer, SessionStore};
 use crate::app::Config;
@@ -54,10 +56,11 @@ pub async fn start_server(
     // 2. Bangun Router
     let app = Router::new()
         .merge(app_router)
-        .nest_service("/public", static_files)
+        .fallback_service(static_files.not_found_service(ErrorController::not_found.into_service()))
+        .layer(axum::middleware::from_fn(crate::middleware::security_headers::security_headers_middleware))
+        .layer(axum::middleware::from_fn(crate::middleware::logging::logging_middleware))
         .layer(GovernorLayer::new(governor_conf))
         .layer(SessionLayer::new(session_store))
-        .fallback(ErrorController::not_found)
         .with_state(state);
 
     // 2.5 Live Reload (Hanya aktif jika APP_DEBUG=true)
@@ -67,6 +70,9 @@ pub async fn start_server(
     } else {
         app
     };
+    
+    // 2.6 Normalisasi Path (Menangani trailing slash /home/ -> /home)
+    let app = NormalizePathLayer::trim_trailing_slash().layer(app);
 
     // 3. Tentukan Alamat
     let addr_str = format!("{}:{}", cfg.app_host, cfg.app_port);
@@ -76,7 +82,7 @@ pub async fn start_server(
     
     // 4. Jalankan Server dengan ConnectInfo agar IP bisa dideteksi
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
+    axum::serve(listener, ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(app)).await.unwrap();
 }
 
 /// Membunuh proses yang menggunakan port tertentu agar tidak terjadi error "Address already in use"
@@ -96,11 +102,16 @@ fn kill_port_if_in_use(port: u16) {
                 
                 // Membunuh proses tersebut
                 for pid in pid_str.split('\n') {
-                    let _ = Command::new("kill")
-                        .arg("-9")
-                        .arg(pid)
-                        .output();
+                    if !pid.is_empty() {
+                        let _ = Command::new("kill")
+                            .arg("-9")
+                            .arg(pid)
+                            .output();
+                    }
                 }
+
+                // Beri waktu sejenak agar OS melepas port (Penting agar tidak panic AddrInUse)
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
         }
     }

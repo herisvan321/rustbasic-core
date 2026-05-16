@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.1.7"
+version = "0.1.8"
 build = false
 autolib = false
 autobins = false
@@ -151,6 +151,7 @@ features = [
     "set-header",
     "set-status",
     "cors",
+    "normalize-path",
 ]
 
 [dependencies.tower-livereload]

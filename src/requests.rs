@@ -12,7 +12,7 @@ use crate::session_manager::RustBasicSessionStore;
 pub struct Request {
     pub inputs: Value,
     pub method: Method,
-    #[allow(dead_code)]
+    pub path: String,
     pub headers: HashMap<String, String>,
     pub session: Session<RustBasicSessionStore>,
 }
@@ -86,10 +86,19 @@ where
             .cloned()
             .ok_or_else(|| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Session tidak ditemukan").into_response())?;
 
+        let path = parts.uri.path().to_string();
+        let mut headers = HashMap::new();
+        for (name, value) in parts.headers.iter() {
+            if let Ok(val_str) = value.to_str() {
+                headers.insert(name.as_str().to_lowercase(), val_str.to_string());
+            }
+        }
+
         Ok(Request {
             inputs,
             method,
-            headers: HashMap::new(),
+            path,
+            headers,
             session,
         })
     }

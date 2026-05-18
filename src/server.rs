@@ -22,10 +22,57 @@ pub struct AppState {
     pub config: Arc<Config>,
 }
 
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../rustbasic/public/"]
+struct EmbeddedPublic;
+
+// Helper internal untuk menebak MIME type berdasarkan ekstensi file
+fn guess_mime(path: &str) -> &'static str {
+    if path.ends_with(".js") {
+        "application/javascript"
+    } else if path.ends_with(".css") {
+        "text/css"
+    } else if path.ends_with(".html") {
+        "text/html"
+    } else if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else if path.ends_with(".ico") {
+        "image/x-icon"
+    } else if path.ends_with(".json") {
+        "application/json"
+    } else if path.ends_with(".woff") {
+        "font/woff"
+    } else if path.ends_with(".woff2") {
+        "font/woff2"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+// Custom handler untuk menyajikan file statis dari biner ter-embed
+async fn embedded_fallback_handler(uri: axum::http::Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+    let file_path = if path.is_empty() { "index.html" } else { path };
+
+    match EmbeddedPublic::get(file_path) {
+        Some(content) => {
+            let mime = guess_mime(file_path);
+            axum::response::Response::builder()
+                .header(axum::http::header::CONTENT_TYPE, mime)
+                .body(axum::body::Body::from(content.data))
+                .unwrap()
+        }
+        None => ErrorController::not_found().await.into_response(),
+    }
+}
+
 pub async fn start_server(
     cfg: Config, 
     session_store: SessionStore<RustBasicSessionStore>,
-    static_files: ServeDir,
     db: DatabaseConnection,
     app_router: Router<AppState>
 ) {
@@ -54,9 +101,17 @@ pub async fn start_server(
     );
 
     // 2. Bangun Router
-    let app = Router::new()
-        .merge(app_router)
-        .fallback_service(static_files.not_found_service(ErrorController::not_found.into_service()))
+    let app = Router::new().merge(app_router);
+    
+    // Tentukan Fallback Service Secara Dinamis (Disk vs Embedded)
+    let app = if cfg.app_debug {
+        let static_files = ServeDir::new("public");
+        app.fallback_service(static_files.not_found_service(ErrorController::not_found.into_service()))
+    } else {
+        app.fallback(embedded_fallback_handler)
+    };
+
+    let app = app
         .layer(axum::middleware::from_fn(crate::middleware::security_headers::security_headers_middleware))
         .layer(axum::middleware::from_fn(crate::middleware::logging::logging_middleware))
         .layer(GovernorLayer::new(governor_conf))

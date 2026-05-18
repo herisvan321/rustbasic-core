@@ -28,8 +28,17 @@ pub async fn security_headers_middleware(
     headers.insert(header::X_XSS_PROTECTION, "1; mode=block".parse().unwrap());
     
     // 4. Content Security Policy (Lengkap)
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
+    let cfg = crate::Config::load();
+    let csp = if cfg.app_debug {
+        concat!(
+            "default-src 'self'; ",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173 http://127.0.0.1:5173 https:; ",
+            "style-src 'self' 'unsafe-inline' http://localhost:5173 http://127.0.0.1:5173 https:; ",
+            "font-src 'self' https: data:; ",
+            "img-src 'self' data: https:; ",
+            "connect-src 'self' ws://localhost:5173 ws://127.0.0.1:5173 http://localhost:5173 http://127.0.0.1:5173 https:;"
+        )
+    } else {
         concat!(
             "default-src 'self'; ",
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; ",
@@ -37,8 +46,9 @@ pub async fn security_headers_middleware(
             "font-src 'self' https: data:; ",
             "img-src 'self' data: https:; ",
             "connect-src 'self' https:;"
-        ).parse().unwrap()
-    );
+        )
+    };
+    headers.insert(header::CONTENT_SECURITY_POLICY, csp.parse().unwrap());
     
     response
 }

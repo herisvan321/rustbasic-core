@@ -27,16 +27,31 @@ static CSS_SRC: LazyLock<String> = LazyLock::new(|| {
 });
 
 
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../rustbasic/src/resources/views/"]
+struct EmbeddedTemplates;
+
 // 2. Setup Engine Template (Minijinja)
 pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
     let mut env = Environment::new();
     
-    // Default Loader: Mencari di disk
+    // Default Loader: Mencari di disk (jika debug), lalu fallback ke memori
     env.set_loader(|name| {
-        let path = format!("src/resources/views/{}", name);
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            return Ok(Some(content));
+        let cfg = Config::load();
+        if cfg.app_debug {
+            let path = format!("src/resources/views/{}", name);
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                return Ok(Some(content));
+            }
         }
+        
+        // Fallback ke embedded templates di memori
+        if let Some(file) = EmbeddedTemplates::get(name) {
+            if let Ok(content) = std::str::from_utf8(&file.data) {
+                return Ok(Some(content.to_string()));
+            }
+        }
+        
         Ok(None)
     });
 

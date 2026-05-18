@@ -22,9 +22,11 @@ pub struct AppState {
     pub config: Arc<Config>,
 }
 
-#[derive(rust_embed::RustEmbed)]
-#[folder = "../rustbasic/public/"]
-struct EmbeddedPublic;
+static EMBEDDED_PUBLIC_GET: std::sync::OnceLock<fn(&str) -> Option<rust_embed::EmbeddedFile>> = std::sync::OnceLock::new();
+
+pub fn set_embedded_public(f: fn(&str) -> Option<rust_embed::EmbeddedFile>) {
+    EMBEDDED_PUBLIC_GET.set(f).ok();
+}
 
 // Helper internal untuk menebak MIME type berdasarkan ekstensi file
 fn guess_mime(path: &str) -> &'static str {
@@ -57,8 +59,9 @@ fn guess_mime(path: &str) -> &'static str {
 async fn embedded_fallback_handler(uri: axum::http::Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
     let file_path = if path.is_empty() { "index.html" } else { path };
+    let file = EMBEDDED_PUBLIC_GET.get().and_then(|f| f(file_path));
 
-    match EmbeddedPublic::get(file_path) {
+    match file {
         Some(content) => {
             let mime = guess_mime(file_path);
             axum::response::Response::builder()

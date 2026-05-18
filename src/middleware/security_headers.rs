@@ -30,23 +30,32 @@ pub async fn security_headers_middleware(
     // 4. Content Security Policy (Lengkap)
     let cfg = crate::Config::load();
     let csp = if cfg.app_debug {
-        concat!(
-            "default-src 'self'; ",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173 http://127.0.0.1:5173 https:; ",
-            "style-src 'self' 'unsafe-inline' http://localhost:5173 http://127.0.0.1:5173 https:; ",
-            "font-src 'self' https: data:; ",
-            "img-src 'self' data: https:; ",
-            "connect-src 'self' ws://localhost:5173 ws://127.0.0.1:5173 http://localhost:5173 http://127.0.0.1:5173 https:;"
+        let port = cfg.vite_port;
+        let host = &cfg.app_host;
+        let extra_hosts = if host != "0.0.0.0" && host != "127.0.0.1" && host != "localhost" && !host.is_empty() {
+            format!("http://{}:{} ws://{}:{} ", host, port, host, port)
+        } else {
+            "".to_string()
+        };
+
+        format!(
+            "default-src 'self'; \
+             script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:{} http://127.0.0.1:{} {}https:; \
+             style-src 'self' 'unsafe-inline' http://localhost:{} http://127.0.0.1:{} {}https:; \
+             font-src 'self' https: data:; \
+             img-src 'self' data: https:; \
+             connect-src 'self' ws://localhost:{} ws://127.0.0.1:{} http://localhost:{} http://127.0.0.1:{} {}https:;",
+            port, port, extra_hosts,
+            port, port, extra_hosts,
+            port, port, port, port, extra_hosts
         )
     } else {
-        concat!(
-            "default-src 'self'; ",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; ",
-            "style-src 'self' 'unsafe-inline' https:; ",
-            "font-src 'self' https: data:; ",
-            "img-src 'self' data: https:; ",
-            "connect-src 'self' https:;"
-        )
+        "default-src 'self'; \
+         script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; \
+         style-src 'self' 'unsafe-inline' https:; \
+         font-src 'self' https: data:; \
+         img-src 'self' data: https:; \
+         connect-src 'self' https:;".to_string()
     };
     headers.insert(header::CONTENT_SECURITY_POLICY, csp.parse().unwrap());
     

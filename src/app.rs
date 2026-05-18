@@ -15,6 +15,7 @@ pub struct Config {
     pub app_url: String,
     pub app_timezone: String,
     pub app_limit_request: u64,
+    pub vite_port: u16,
     
     // 🗄️ Database
     pub db_connection: String,
@@ -62,6 +63,10 @@ impl Config {
                 .unwrap_or_else(|_| "20".to_string())
                 .parse()
                 .expect("APP_LIMIT_REQUEST harus berupa angka"),
+            vite_port: env::var("VITE_PORT")
+                .unwrap_or_else(|_| "5173".to_string())
+                .parse()
+                .expect("VITE_PORT harus berupa angka"),
             
             // Database
             db_connection: env::var("DB_CONNECTION").unwrap_or_else(|_| "sqlite".to_string()),

@@ -45,6 +45,16 @@ impl Request {
             // Simpan input lama ke session untuk repopulasi form (Flash Input)
             self.session.set("old", self.inputs.clone());
             
+            // Simpan error di session untuk keperluan Inertia/Redirect
+            let mut formatted_errors = HashMap::new();
+            for (field, field_errors) in e.field_errors() {
+                if let Some(err) = field_errors.first() {
+                    let msg = err.message.clone().unwrap_or_else(|| std::borrow::Cow::Borrowed("Invalid field"));
+                    formatted_errors.insert(field.to_string(), msg.to_string());
+                }
+            }
+            self.session.set("errors", formatted_errors);
+            
             Box::new((axum::http::StatusCode::UNPROCESSABLE_ENTITY, 
              axum::response::Json(json!({ "errors": e })).into_response()))
         })?;

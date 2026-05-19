@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRequest, FromRequestParts, Query, Form, Request as AxumRequest},
+    extract::{FromRequest, FromRequestParts, Query, Form, Json, Request as AxumRequest},
     http::Method,
     response::{IntoResponse, Response},
 };
@@ -71,14 +71,27 @@ where
             }
         }
 
-        // 2. Ambil Form Data (POST)
+        // 2. Ambil Form Data atau JSON Data berdasarkan Content-Type (POST/PUT/PATCH)
         let parts_copy = parts.clone();
-        if method == Method::POST
-            && let Ok(Form(form_data)) = Form::<HashMap<String, String>>::from_request(axum::http::Request::from_parts(parts_copy, body), state).await {
+        let content_type = parts.headers.get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        if method == Method::POST || method == Method::PUT || method == Method::PATCH {
+            if content_type.starts_with("application/json") {
+                if let Ok(Json(json_data)) = Json::<Value>::from_request(axum::http::Request::from_parts(parts_copy, body), state).await {
+                    if let Value::Object(obj) = json_data {
+                        for (k, v) in obj {
+                            inputs[k] = v;
+                        }
+                    }
+                }
+            } else if let Ok(Form(form_data)) = Form::<HashMap<String, String>>::from_request(axum::http::Request::from_parts(parts_copy, body), state).await {
                 for (k, v) in form_data {
                     inputs[k] = json!(v);
                 }
             }
+        }
         
         // Ambil Session dari extensions
         let session = parts.extensions

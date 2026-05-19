@@ -17,6 +17,21 @@ impl RustBasicSessionStore {
     pub fn new(pool: AnyPool) -> Self {
         Self { pool }
     }
+
+    async fn get_placeholder_query(&self, sql: &str) -> String {
+        let is_mysql = if let Ok(conn) = self.pool.acquire().await {
+            conn.backend_name() == "MySQL"
+        } else {
+            false
+        };
+
+        if is_mysql {
+            let re = regex::Regex::new(r"\$\d+").unwrap();
+            re.replace_all(sql, "?").into_owned()
+        } else {
+            sql.to_string()
+        }
+    }
 }
 
 #[async_trait]
@@ -26,7 +41,8 @@ impl DatabasePool for RustBasicSessionStore {
     }
 
     async fn delete_one_by_id(&self, id: &str, table_name: &str) -> Result<(), DatabaseError> {
-        let query = format!("DELETE FROM {} WHERE id = $1", table_name);
+        let raw_query = format!("DELETE FROM {} WHERE id = $1", table_name);
+        let query = self.get_placeholder_query(&raw_query).await;
         sqlx::query(&query)
             .bind(id)
             .execute(&self.pool)
@@ -40,7 +56,8 @@ impl DatabasePool for RustBasicSessionStore {
     }
 
     async fn load(&self, id: &str, table_name: &str) -> Result<Option<String>, DatabaseError> {
-        let query = format!("SELECT payload FROM {} WHERE id = $1 AND last_activity > $2", table_name);
+        let raw_query = format!("SELECT payload FROM {} WHERE id = $1 AND last_activity > $2", table_name);
+        let query = self.get_placeholder_query(&raw_query).await;
         let now = chrono::Utc::now().timestamp();
         
         let row: Option<(String,)> = sqlx::query_as(&query)
@@ -57,13 +74,15 @@ impl DatabasePool for RustBasicSessionStore {
         // Ambil IP dari tracker (jika ada)
         let ip = IP_TRACKER.get(id).map(|i| i.clone()).unwrap_or_else(|| "unknown".to_string());
 
-        let delete_query = format!("DELETE FROM {} WHERE id = $1", table_name);
+        let raw_delete_query = format!("DELETE FROM {} WHERE id = $1", table_name);
+        let delete_query = self.get_placeholder_query(&raw_delete_query).await;
         sqlx::query(&delete_query).bind(id).execute(&self.pool).await.ok();
 
-        let insert_query = format!(
+        let raw_insert_query = format!(
             "INSERT INTO {} (id, payload, last_activity, ip_address) VALUES ($1, $2, $3, $4)",
             table_name
         );
+        let insert_query = self.get_placeholder_query(&raw_insert_query).await;
 
         sqlx::query(&insert_query)
             .bind(id)
@@ -78,7 +97,8 @@ impl DatabasePool for RustBasicSessionStore {
 
     async fn delete_by_expiry(&self, table_name: &str) -> Result<Vec<String>, DatabaseError> {
         let now = chrono::Utc::now().timestamp();
-        let select_query = format!("SELECT id FROM {} WHERE last_activity < $1", table_name);
+        let raw_select_query = format!("SELECT id FROM {} WHERE last_activity < $1", table_name);
+        let select_query = self.get_placeholder_query(&raw_select_query).await;
         let ids: Vec<String> = sqlx::query_as::<_, (String,)>(&select_query)
             .bind(now)
             .fetch_all(&self.pool)
@@ -93,7 +113,8 @@ impl DatabasePool for RustBasicSessionStore {
             IP_TRACKER.remove(id);
         }
 
-        let delete_query = format!("DELETE FROM {} WHERE last_activity < $1", table_name);
+        let raw_delete_query = format!("DELETE FROM {} WHERE last_activity < $1", table_name);
+        let delete_query = self.get_placeholder_query(&raw_delete_query).await;
         sqlx::query(&delete_query)
             .bind(now)
             .execute(&self.pool)
@@ -113,7 +134,8 @@ impl DatabasePool for RustBasicSessionStore {
     }
 
     async fn exists(&self, id: &str, table_name: &str) -> Result<bool, DatabaseError> {
-        let query = format!("SELECT id FROM {} WHERE id = $1", table_name);
+        let raw_query = format!("SELECT id FROM {} WHERE id = $1", table_name);
+        let query = self.get_placeholder_query(&raw_query).await;
         let row: Option<(String,)> = sqlx::query_as(&query)
             .bind(id)
             .fetch_optional(&self.pool)

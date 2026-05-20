@@ -48,5 +48,6 @@ pub use base64;
 pub use dashmap;
 pub use once_cell;
 pub use tower_livereload;
+pub use rust_embed;
 
 pub type Router = axum::Router;

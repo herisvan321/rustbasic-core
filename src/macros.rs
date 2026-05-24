@@ -80,30 +80,31 @@ macro_rules! model_impl {
 
         impl ActiveModel {
             pub fn fill(json: &$crate::serde_json::Value) -> Result<Self, $crate::sea_orm::DbErr> {
-                let mut sanitized = $crate::serde_json::Map::new();
+                let mut active: Self = ::std::default::Default::default();
                 if let Some(obj) = json.as_object() {
                     let fillable: Vec<&str> = vec![ $( stringify!($fill) ),* ];
                     let guarded: Vec<&str> = vec![ $( stringify!($guard) ),* ];
                     
-                    if !fillable.is_empty() {
-                        for key in fillable {
+                    $(
+                        let key = stringify!($field_name);
+                        let is_allowed = if !fillable.is_empty() {
+                            fillable.contains(&key)
+                        } else if !guarded.is_empty() {
+                            !guarded.contains(&key)
+                        } else {
+                            true
+                        };
+                        
+                        if is_allowed {
                             if let Some(val) = obj.get(key) {
-                                sanitized.insert(key.to_string(), val.clone());
+                                let parsed: $field_type = $crate::serde_json::from_value(val.clone())
+                                    .map_err(|e| $crate::sea_orm::DbErr::Custom(format!("Json Error: {}", e)))?;
+                                active.$field_name = $crate::sea_orm::ActiveValue::Set(parsed);
                             }
                         }
-                    } else if !guarded.is_empty() {
-                        for (key, val) in obj {
-                            if !guarded.contains(&key.as_str()) {
-                                sanitized.insert(key.clone(), val.clone());
-                            }
-                        }
-                    } else {
-                        for (key, val) in obj {
-                            sanitized.insert(key.clone(), val.clone());
-                        }
-                    }
+                    )*
                 }
-                Self::from_json($crate::serde_json::Value::Object(sanitized))
+                Ok(active)
             }
         }
     };
@@ -151,30 +152,31 @@ macro_rules! model_impl {
 
         impl ActiveModel {
             pub fn fill(json: &$crate::serde_json::Value) -> Result<Self, $crate::sea_orm::DbErr> {
-                let mut sanitized = $crate::serde_json::Map::new();
+                let mut active: Self = ::std::default::Default::default();
                 if let Some(obj) = json.as_object() {
                     let fillable: Vec<&str> = vec![ $( stringify!($fill) ),* ];
                     let guarded: Vec<&str> = vec![ $( stringify!($guard) ),* ];
                     
-                    if !fillable.is_empty() {
-                        for key in fillable {
+                    $(
+                        let key = stringify!($field_name);
+                        let is_allowed = if !fillable.is_empty() {
+                            fillable.contains(&key)
+                        } else if !guarded.is_empty() {
+                            !guarded.contains(&key)
+                        } else {
+                            true
+                        };
+                        
+                        if is_allowed {
                             if let Some(val) = obj.get(key) {
-                                sanitized.insert(key.to_string(), val.clone());
+                                let parsed: $field_type = $crate::serde_json::from_value(val.clone())
+                                    .map_err(|e| $crate::sea_orm::DbErr::Custom(format!("Json Error: {}", e)))?;
+                                active.$field_name = $crate::sea_orm::ActiveValue::Set(parsed);
                             }
                         }
-                    } else if !guarded.is_empty() {
-                        for (key, val) in obj {
-                            if !guarded.contains(&key.as_str()) {
-                                sanitized.insert(key.clone(), val.clone());
-                            }
-                        }
-                    } else {
-                        for (key, val) in obj {
-                            sanitized.insert(key.clone(), val.clone());
-                        }
-                    }
+                    )*
                 }
-                Self::from_json($crate::serde_json::Value::Object(sanitized))
+                Ok(active)
             }
         }
     };

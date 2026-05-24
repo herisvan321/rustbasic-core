@@ -11,6 +11,10 @@ pub mod errors;
 pub mod mail;
 pub mod seeder;
 pub mod middleware;
+pub mod schema;
+pub mod macros;
+
+pub use schema::{Schema, Blueprint, ColumnBuilder};
 
 // Re-export Config agar bisa dipanggil dengan crate::Config
 pub use app::Config;

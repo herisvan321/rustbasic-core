@@ -1,20 +1,13 @@
-/* ---------------------------------------------------------
- * 📑 LABEL: ERRORS (config/errors.rs)
- * Menangani berbagai kode error HTTP dengan tampilan premium.
- * --------------------------------------------------------- */
-
 use crate::view::render;
-use axum::{
-    http::StatusCode,
-    response::IntoResponse,
-};
+use crate::router::{IntoResponse, Response};
 use minijinja::context;
+use http::StatusCode;
 
 pub struct ErrorController;
 
 impl ErrorController {
     /// Handler umum untuk menampilkan halaman error
-    pub fn show(code: u16, message: &str) -> impl IntoResponse {
+    pub fn show(code: u16, message: &str) -> Response {
         let status = StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         
         let title = match code {
@@ -33,11 +26,11 @@ impl ErrorController {
             code => code,
             title => title,
             message => message
-        }))
+        })).into_response()
     }
 
     /// Khusus untuk 404 Not Found (digunakan sebagai fallback)
-    pub async fn not_found() -> impl IntoResponse {
+    pub async fn not_found() -> Response {
         Self::show(404, "Maaf, halaman yang Anda cari tidak ditemukan.")
     }
 }

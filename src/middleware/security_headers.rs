@@ -1,17 +1,10 @@
-/* ---------------------------------------------------------
- * 📑 LABEL: SECURITY HEADERS
- * Menambahkan header keamanan standar industri.
- * --------------------------------------------------------- */
-
-use axum::{
-    body::Body,
-    http::{Request, header},
-    middleware::Next,
-    response::Response,
-};
+use crate::requests::Request;
+use crate::middleware::Next;
+use crate::router::Response;
+use http::header;
 
 pub async fn security_headers_middleware(
-    req: Request<Body>,
+    req: Request,
     next: Next,
 ) -> Response {
     let mut response = next.run(req).await;

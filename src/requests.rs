@@ -1,24 +1,23 @@
-use axum::{
-    extract::{FromRequest, FromRequestParts, Query, Form, Json, Request as AxumRequest},
-    http::Method,
-    response::{IntoResponse, Response},
-};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use validator::Validate;
-use axum_session::Session;
-use crate::session_manager::RustBasicSessionStore;
+use crate::validator::Validate;
+use crate::router::{Response, IntoResponse, Json};
+use crate::session::Session;
 
+#[derive(Clone)]
 pub struct Request {
     pub inputs: Value,
-    pub method: Method,
+    pub method: http::Method,
     pub path: String,
     pub headers: HashMap<String, String>,
-    pub session: Session<RustBasicSessionStore>,
+    pub session: Session,
+    pub state: crate::AppState,
+    pub ip_address: String,
+    /// Route parameters, misal dari "/user/{id}" → params["id"] = "123"
+    pub params: HashMap<String, String>,
 }
 
 impl Request {
-    #[allow(dead_code)]
     pub fn input(&self, key: &str) -> Option<&Value> {
         self.inputs.get(key)
     }
@@ -35,94 +34,28 @@ impl Request {
         &self.inputs
     }
 
-    pub fn validate<T: Validate + serde::de::DeserializeOwned>(&self) -> Result<T, Box<(axum::http::StatusCode, Response)>> {
+    /// Ambil route parameter, misal `req.param("id")` dari route "/user/{id}"
+    pub fn param(&self, key: &str) -> Option<&str> {
+        self.params.get(key).map(|s| s.as_str())
+    }
+
+    pub fn validate<T: Validate + serde::de::DeserializeOwned>(&self) -> Result<T, Box<(http::StatusCode, Response)>> {
         let data: T = serde_json::from_value(self.inputs.clone()).map_err(|e| {
-            Box::new((axum::http::StatusCode::UNPROCESSABLE_ENTITY, 
-             axum::response::Json(json!({ "error": "Invalid format", "detail": e.to_string() })).into_response()))
+            Box::new((http::StatusCode::UNPROCESSABLE_ENTITY, 
+             Json(json!({ "error": "Invalid format", "detail": e.to_string() })).into_response()))
         })?;
 
-        data.validate().map_err(|e| {
+        data.validate().map_err(|errors| {
             // Simpan input lama ke session untuk repopulasi form (Flash Input)
             self.session.set("old", self.inputs.clone());
             
             // Simpan error di session untuk keperluan Inertia/Redirect
-            let mut formatted_errors = HashMap::new();
-            for (field, field_errors) in e.field_errors() {
-                if let Some(err) = field_errors.first() {
-                    let msg = err.message.clone().unwrap_or_else(|| std::borrow::Cow::Borrowed("Invalid field"));
-                    formatted_errors.insert(field.to_string(), msg.to_string());
-                }
-            }
-            self.session.set("errors", formatted_errors);
+            self.session.set("errors", errors.clone());
             
-            Box::new((axum::http::StatusCode::UNPROCESSABLE_ENTITY, 
-             axum::response::Json(json!({ "errors": e })).into_response()))
+            Box::new((http::StatusCode::UNPROCESSABLE_ENTITY, 
+             Json(json!({ "errors": errors })).into_response()))
         })?;
 
         Ok(data)
-    }
-}
-
-impl<S> FromRequest<S> for Request
-where
-    S: Send + Sync,
-{
-    type Rejection = Response;
-
-    async fn from_request(req: AxumRequest, state: &S) -> Result<Self, Self::Rejection> {
-        let method = req.method().clone();
-        let mut inputs = json!({});
-
-        // 1. Ambil Query Params (?id=1)
-        let (mut parts, body) = req.into_parts();
-        if let Ok(Query(query_params)) = Query::<HashMap<String, String>>::from_request_parts(&mut parts, state).await {
-            for (k, v) in query_params {
-                inputs[k] = json!(v);
-            }
-        }
-
-        // 2. Ambil Form Data atau JSON Data berdasarkan Content-Type (POST/PUT/PATCH)
-        let parts_copy = parts.clone();
-        let content_type = parts.headers.get(axum::http::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        if method == Method::POST || method == Method::PUT || method == Method::PATCH {
-            if content_type.starts_with("application/json") {
-                if let Ok(Json(json_data)) = Json::<Value>::from_request(axum::http::Request::from_parts(parts_copy, body), state).await {
-                    if let Value::Object(obj) = json_data {
-                        for (k, v) in obj {
-                            inputs[k] = v;
-                        }
-                    }
-                }
-            } else if let Ok(Form(form_data)) = Form::<HashMap<String, String>>::from_request(axum::http::Request::from_parts(parts_copy, body), state).await {
-                for (k, v) in form_data {
-                    inputs[k] = json!(v);
-                }
-            }
-        }
-        
-        // Ambil Session dari extensions
-        let session = parts.extensions
-            .get::<Session<RustBasicSessionStore>>()
-            .cloned()
-            .ok_or_else(|| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Session tidak ditemukan").into_response())?;
-
-        let path = parts.uri.path().to_string();
-        let mut headers = HashMap::new();
-        for (name, value) in parts.headers.iter() {
-            if let Ok(val_str) = value.to_str() {
-                headers.insert(name.as_str().to_lowercase(), val_str.to_string());
-            }
-        }
-
-        Ok(Request {
-            inputs,
-            method,
-            path,
-            headers,
-            session,
-        })
     }
 }

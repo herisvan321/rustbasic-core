@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.1.18"
+version = "0.1.19"
 build = false
 autolib = false
 autobins = false
@@ -21,12 +21,7 @@ autotests = false
 autobenches = false
 description = "Core framework logic for RustBasic - A modern web framework for Rust"
 readme = "README.md"
-keywords = [
-    "web",
-    "framework",
-    "axum",
-    "orm",
-]
+keywords = ["web", "framework", "hyper", "sqlx"]
 categories = ["web-programming::http-server"]
 license = "MIT"
 repository = "https://github.com/herisvan321/rustbasic-core"
@@ -35,18 +30,20 @@ repository = "https://github.com/herisvan321/rustbasic-core"
 name = "rustbasic_core"
 path = "src/lib.rs"
 
-[dependencies.async-trait]
-version = "0.1.86"
+[dependencies.http]
+version = "1.1"
 
-[dependencies.axum]
-version = "0.8.9"
 
-[dependencies.axum_session]
-version = "0.20.0"
-features = ["key-store"]
+[dependencies.hyper]
+version = "1.0"
+features = ["full"]
 
-[dependencies.base64]
-version = "0.22.1"
+[dependencies.hyper-util]
+version = "0.1"
+features = ["server", "tokio"]
+
+[dependencies.http-body-util]
+version = "0.1"
 
 [dependencies.bcrypt]
 version = "0.19.1"
@@ -55,65 +52,21 @@ version = "0.19.1"
 version = "0.4.39"
 features = ["serde"]
 
-[dependencies.chrono-humanize]
-version = "0.2.3"
-
 [dependencies.chrono-tz]
 version = "0.10.0"
 
-[dependencies.colored]
-version = "3.0"
-
-[dependencies.dashmap]
-version = "6.1.0"
-
-[dependencies.dotenvy]
-version = "0.15.7"
-
-[dependencies.lettre]
-version = "0.11"
-features = [
-    "tokio1-rustls-tls",
-    "smtp-transport",
-    "builder",
-]
-default-features = false
 
 [dependencies.minijinja]
 version = "2.19.0"
 features = ["loader", "json"]
 
-[dependencies.once_cell]
-version = "1.19.0"
-
 [dependencies.rand]
 version = "0.10.1"
 
-[dependencies.regex]
-version = "1.10"
 
 [dependencies.rust-embed]
 version = "8.11.0"
 
-[dependencies.sea-orm]
-version = "1.1.4"
-features = [
-    "runtime-tokio-rustls",
-    "sqlx-sqlite",
-    "sqlx-mysql",
-    "macros",
-    "with-chrono",
-]
-default-features = false
-
-[dependencies.sea-orm-migration]
-version = "1.1.4"
-features = [
-    "runtime-tokio-rustls",
-    "sqlx-sqlite",
-    "sqlx-mysql",
-]
-default-features = false
 
 [dependencies.serde]
 version = "1.0.228"
@@ -122,61 +75,26 @@ features = ["derive"]
 [dependencies.serde_json]
 version = "1.0.140"
 
-[dependencies.sha2]
-version = "0.11.0"
 
 [dependencies.sqlx]
 version = "0.8.3"
-features = [
-    "runtime-tokio",
-    "tls-rustls",
-    "sqlite",
-    "mysql",
-    "any",
-]
+features = ["runtime-tokio", "tls-rustls", "sqlite", "mysql", "any", "chrono"]
 default-features = false
 
 [dependencies.tokio]
 version = "1.52.1"
 features = ["full"]
 
-[dependencies.tower]
-version = "0.5.2"
-features = ["full"]
+[dependencies.reqwest]
+version = "0.12"
+features = ["json", "rustls-tls"]
+default-features = false
 
-[dependencies.tower-http]
-version = "0.6.8"
-features = [
-    "fs",
-    "set-header",
-    "set-status",
-    "cors",
-    "normalize-path",
-]
+[dependencies.lettre]
+version = "0.11"
+features = ["tokio1-rustls-tls", "smtp-transport", "builder"]
+default-features = false
 
-[dependencies.tower-livereload]
-version = "0.10.3"
-
-[dependencies.tower_governor]
-version = "0.8.0"
-
-[dependencies.tracing]
-version = "0.1.44"
-
-[dependencies.tracing-appender]
-version = "0.2.3"
-
-[dependencies.tracing-subscriber]
-version = "0.3.23"
-features = ["env-filter"]
-
-[dependencies.uuid]
-version = "1.13.1"
-features = [
-    "v4",
-    "serde",
-]
-
-[dependencies.validator]
-version = "0.20.0"
-features = ["derive"]
+[dependencies.rustbasic-core-macro]
+path = "macro"
+version = "0.1.0"

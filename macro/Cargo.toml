@@ -1,0 +1,17 @@
+[package]
+name = "rustbasic-core-macro"
+version = "0.1.0"
+edition = "2024"
+description = "Procedural macros for rustbasic-core - A modern web framework for Rust"
+license = "MIT"
+repository = "https://github.com/herisvan321/rustbasic-core"
+keywords = ["web", "framework", "macro", "rustbasic"]
+categories = ["web-programming::http-server"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"

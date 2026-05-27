@@ -1,41 +1,46 @@
-use axum_session::{SessionConfig, SessionStore, Key};
 use crate::Config;
 use crate::session_manager::RustBasicSessionStore;
-use sha2::{Sha512, Digest};
 use sqlx::AnyPool;
-use sea_orm::{ConnectionTrait, Database, sea_query, Iden};
-use sea_query::{Table, ColumnDef};
+use std::sync::Arc;
+use std::sync::Mutex;
+use serde_json::Value;
 
-#[derive(Iden)]
-enum Sessions {
-    Table,
-    Id,
-    Payload,
-    LastActivity,
-    IpAddress,
+#[derive(Clone)]
+pub struct Session {
+    pub(crate) id: String,
+    pub(crate) data: Arc<Mutex<serde_json::Map<String, Value>>>,
 }
 
-pub async fn setup_session(cfg: &Config) -> SessionStore<RustBasicSessionStore> {
-    // 1. Decode APP_KEY
-    let key_bytes = if cfg.app_key.starts_with("base64:") {
-        use base64::{Engine as _, engine::general_purpose};
-        general_purpose::STANDARD.decode(&cfg.app_key[7..]).unwrap_or_else(|_| cfg.app_key.as_bytes().to_vec())
-    } else {
-        cfg.app_key.as_bytes().to_vec()
-    };
-    
-    // 2. Derive 64-byte key using Sha512
-    let mut hasher = Sha512::new();
-    hasher.update(&key_bytes);
-    let final_key = hasher.finalize();
-    let session_key = Key::from(&final_key);
+impl Session {
+    pub fn new(id: String) -> Self {
+        Self {
+            id,
+            data: Arc::new(Mutex::new(serde_json::Map::new())),
+        }
+    }
 
-    // 3. Setup Session Config
-    let session_config = SessionConfig::default()
-        .with_table_name("sessions")
-        .with_key(session_key);
+    pub fn get<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        let guard = self.data.lock().unwrap();
+        let val = guard.get(key)?;
+        serde_json::from_value(val.clone()).ok()
+    }
 
-    // 4. Determine Session DB URL
+    pub fn set<T: serde::Serialize>(&self, key: &str, value: T) {
+        if let Ok(val) = serde_json::to_value(value) {
+            self.data.lock().unwrap().insert(key.to_string(), val);
+        }
+    }
+
+    pub fn remove(&self, key: &str) -> Option<Value> {
+        self.data.lock().unwrap().remove(key)
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+pub async fn setup_session(cfg: &Config) -> RustBasicSessionStore {
     let session_db_url = if cfg.session_driver == "file" {
         "sqlite:database/sessions.sqlite?mode=rwc".to_string()
     } else if cfg.db_connection == "mysql" {
@@ -47,7 +52,6 @@ pub async fn setup_session(cfg: &Config) -> SessionStore<RustBasicSessionStore> 
         format!("sqlite:database/{}.sqlite?mode=rwc", cfg.db_database)
     };
 
-    // 5. Connect and Create Store
     sqlx::any::install_default_drivers();
     let session_pool = match AnyPool::connect(&session_db_url).await {
         Ok(pool) => pool,
@@ -67,10 +71,7 @@ pub async fn setup_session(cfg: &Config) -> SessionStore<RustBasicSessionStore> 
         }
     };
     
-    SessionStore::<RustBasicSessionStore>::new(
-        Some(RustBasicSessionStore::new(session_pool)), 
-        session_config
-    ).await.expect("Gagal menginisialisasi SessionStore")
+    RustBasicSessionStore::new(session_pool)
 }
 
 pub async fn init_sessions(cfg: &Config) {
@@ -85,20 +86,15 @@ pub async fn init_sessions(cfg: &Config) {
         format!("sqlite:database/{}.sqlite?mode=rwc", cfg.db_database)
     };
 
-    let db = Database::connect(&db_url).await.expect("Gagal terhubung ke database session");
-    let builder = db.get_database_backend();
+    sqlx::any::install_default_drivers();
+    let pool = AnyPool::connect(&db_url).await.expect("Gagal terhubung ke database session");
 
-    // 2. Auto-Create Table Sessions jika belum ada menggunakan Sea-ORM
-    let table = Table::create()
-        .table(Sessions::Table)
-        .if_not_exists()
-        .col(ColumnDef::new(Sessions::Id).string_len(255).primary_key())
-        .col(ColumnDef::new(Sessions::Payload).text().not_null())
-        .col(ColumnDef::new(Sessions::LastActivity).big_integer().not_null())
-        .col(ColumnDef::new(Sessions::IpAddress).string_len(45))
-        .to_owned();
+    let sql = "CREATE TABLE IF NOT EXISTS sessions (
+        id VARCHAR(255) PRIMARY KEY,
+        payload TEXT NOT NULL,
+        last_activity BIGINT NOT NULL,
+        ip_address VARCHAR(45)
+    )";
 
-    db.execute(builder.build(&table))
-        .await
-        .expect("Gagal membuat tabel session otomatis");
+    sqlx::query(sql).execute(&pool).await.expect("Gagal membuat tabel session otomatis");
 }

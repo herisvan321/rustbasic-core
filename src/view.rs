@@ -3,19 +3,17 @@
  * Mengatur template engine (Minijinja) dan fungsi render.
  * --------------------------------------------------------- */
 
-use axum::{
-    http::StatusCode,
-    response::{Html, IntoResponse, Response},
-};
+use crate::router::{Html, IntoResponse, Response};
+use http::StatusCode;
 use minijinja::Environment;
 use chrono::DateTime;
-use chrono_humanize::HumanTime;
 use chrono_tz::Tz;
 use std::sync::LazyLock;
 use crate::requests::Request as AppRequest;
 use crate::Config;
 use serde_json::{json, Value};
-use regex::Regex;
+
+use crate::tracing;
 
 // 1. Load Static Assets into Memory
 static HTMX_SRC: LazyLock<String> = LazyLock::new(|| {
@@ -63,8 +61,56 @@ pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
     // Filter: {{ date | diff_for_humans }}
     env.add_filter("diff_for_humans", |value: String| -> String {
         if let Ok(dt) = DateTime::parse_from_rfc3339(&value) {
-             let ht = HumanTime::from(dt);
-             return ht.to_string();
+            let now = chrono::Utc::now();
+            let dt_utc = dt.with_timezone(&chrono::Utc);
+            let duration = now.signed_duration_since(dt_utc);
+            let seconds = duration.num_seconds();
+            if seconds < 0 {
+                let seconds = -seconds;
+                if seconds < 60 {
+                    return "in a few seconds".to_string();
+                }
+                let minutes = seconds / 60;
+                if minutes < 60 {
+                    return format!("in {} minute{}", minutes, if minutes > 1 { "s" } else { "" });
+                }
+                let hours = minutes / 60;
+                if hours < 24 {
+                    return format!("in {} hour{}", hours, if hours > 1 { "s" } else { "" });
+                }
+                let days = hours / 24;
+                if days < 30 {
+                    return format!("in {} day{}", days, if days > 1 { "s" } else { "" });
+                }
+                let months = days / 30;
+                if months < 12 {
+                    return format!("in {} month{}", months, if months > 1 { "s" } else { "" });
+                }
+                let years = months / 12;
+                return format!("in {} year{}", years, if years > 1 { "s" } else { "" });
+            } else {
+                if seconds < 60 {
+                    return "a few seconds ago".to_string();
+                }
+                let minutes = seconds / 60;
+                if minutes < 60 {
+                    return format!("{} minute{} ago", minutes, if minutes > 1 { "s" } else { "" });
+                }
+                let hours = minutes / 60;
+                if hours < 24 {
+                    return format!("{} hour{} ago", hours, if hours > 1 { "s" } else { "" });
+                }
+                let days = hours / 24;
+                if days < 30 {
+                    return format!("{} day{} ago", days, if days > 1 { "s" } else { "" });
+                }
+                let months = days / 30;
+                if months < 12 {
+                    return format!("{} month{} ago", months, if months > 1 { "s" } else { "" });
+                }
+                let years = months / 12;
+                return format!("{} year{} ago", years, if years > 1 { "s" } else { "" });
+            }
         }
         value
     });
@@ -102,6 +148,25 @@ pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
 
     env
 });
+
+/// Menghapus komentar HTML (<!-- ... -->) tanpa regex.
+/// Mendukung komentar multi-baris (ekuivalen dengan flag `(?s)` pada regex).
+fn strip_html_comments(html: &str) -> String {
+    let mut result = String::with_capacity(html.len());
+    let mut remaining = html;
+
+    while let Some(start) = remaining.find("<!--") {
+        result.push_str(&remaining[..start]);
+        if let Some(end) = remaining[start..].find("-->") {
+            remaining = &remaining[start + end + 3..];
+        } else {
+            // Komentar tidak ditutup — buang sisa string
+            break;
+        }
+    }
+    result.push_str(remaining);
+    result
+}
 
 // 3. Fungsi Helper untuk Render HTML Statis
 pub fn render(template: &str, context: minijinja::Value) -> Response {
@@ -165,8 +230,7 @@ fn render_internal(template: &str, context: minijinja::Value) -> Response {
         Ok(tmpl) => match tmpl.render(context.clone()) {
             Ok(rendered) => {
                 // --- LOGIKA MINIFIKASI ---
-                let re_comments = Regex::new(r"(?s)<!--.*?-->").unwrap();
-                let without_comments = re_comments.replace_all(&rendered, "");
+                let without_comments = strip_html_comments(&rendered);
                 
                 let minified = without_comments
                     .lines()

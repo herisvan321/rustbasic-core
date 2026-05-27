@@ -1,9 +1,6 @@
-use axum::{
-    response::{Html, IntoResponse, Json, Redirect, Response},
-};
 use serde::Serialize;
-use serde_json;
-use crate::session_manager::RustBasicSessionStore;
+use crate::router::{Response, IntoResponse, Html, Json, Redirect};
+use crate::session::Session;
 
 pub struct ResponseHelper;
 
@@ -62,7 +59,7 @@ impl ResponseHelper {
     pub fn redirect_with_success(
         url: &str, 
         message: &str, 
-        session: axum_session::Session<RustBasicSessionStore>
+        session: Session
     ) -> Response {
         session.set("flash_success", message);
         Redirect::to(url).into_response()
@@ -72,7 +69,7 @@ impl ResponseHelper {
     pub fn redirect_with_error(
         url: &str, 
         message: &str, 
-        session: axum_session::Session<RustBasicSessionStore>
+        session: Session
     ) -> Response {
         session.set("flash_error", message);
         Redirect::to(url).into_response()

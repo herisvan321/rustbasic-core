@@ -1,77 +1,82 @@
-/* ---------------------------------------------------------
- * 📑 LABEL: LOGGER & BANNER (config/logger.rs)
- * Pengaturan logging (Terminal + File) dan tampilan visual startup.
- * --------------------------------------------------------- */
+use std::fs::OpenOptions;
+use std::io::Write;
+use chrono::Local;
+use crate::colored::Colorize;
 
-use tracing_subscriber::{fmt, EnvFilter, prelude::*, registry};
-use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::fmt::format::{FormatEvent, FormatFields};
-use tracing_subscriber::fmt::FmtContext;
-use tracing::{Event, Subscriber, Level};
-use std::fmt as std_fmt;
-use colored::*;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Level {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
 
-struct CustomFormatter;
-
-impl<S, N> FormatEvent<S, N> for CustomFormatter
-where
-    S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-    N: for<'a> FormatFields<'a> + 'static,
-{
-    fn format_event(
-        &self,
-        _ctx: &FmtContext<'_, S, N>,
-        mut writer: fmt::format::Writer<'_>,
-        event: &Event<'_>,
-    ) -> std_fmt::Result {
-        let metadata = event.metadata();
-        let level = metadata.level();
-        let timestamp = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6fZ");
-
-        // Format: [LEVEL] TIMESTAMP MESSAGE
-        let level_str = format!("[{}]", level);
-        let level_colored = match *level {
-            Level::ERROR => level_str.red().bold(),
-            Level::WARN => level_str.yellow().bold(),
-            Level::INFO => level_str.green().bold(),
-            Level::DEBUG => level_str.blue().bold(),
-            Level::TRACE => level_str.magenta().bold(),
+impl std::fmt::Display for Level {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Level::Error => "ERROR",
+            Level::Warn => "WARN",
+            Level::Info => "INFO",
+            Level::Debug => "DEBUG",
+            Level::Trace => "TRACE",
         };
-
-        write!(writer, "{} {} ", level_colored, timestamp.to_string().dimmed())?;
-        
-        _ctx.format_fields(writer.by_ref(), event)?;
-        writeln!(writer)
+        write!(f, "{}", s)
     }
 }
 
-pub fn init() -> WorkerGuard {
-    let file_appender = tracing_appender::rolling::daily("storage/logs", "rustbasic.log");
-    let (non_blocking_file, guard) = tracing_appender::non_blocking(file_appender);
+pub struct LoggerGuard;
 
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| 
-        "rustbasic=debug,tower_http=debug,axum_session=warn,sqlx=warn".into()
-    );
-
-    registry()
-        .with(env_filter)
-        .with(fmt::layer().event_format(CustomFormatter).with_ansi(true))
-        .with(fmt::layer().with_target(false).with_ansi(false).with_writer(non_blocking_file))
-        .init();
-
+/// Initialize the logger. Displays the banner and returns a dummy guard to keep API compatibility.
+pub fn init() -> LoggerGuard {
     print_banner();
-    guard
+    LoggerGuard
+}
+
+/// Core logging function that handles console output with colors and appends to a daily rolling log file.
+pub fn log(level: Level, msg: &str) {
+    let timestamp = Local::now().format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string();
+
+    let level_str = format!("[{}]", level);
+    let level_colored = match level {
+        Level::Error => level_str.red().bold(),
+        Level::Warn => level_str.yellow().bold(),
+        Level::Info => level_str.green().bold(),
+        Level::Debug => level_str.blue().bold(),
+        Level::Trace => level_str.magenta().bold(),
+    };
+
+    let console_line = format!("{} {} {}", level_colored, timestamp.to_string().dimmed(), msg);
+    println!("{}", console_line);
+
+    // Ensure logs directory exists
+    let _ = std::fs::create_dir_all("storage/logs");
+
+    // Write to daily file (rolling)
+    let date_str = Local::now().format("%Y-%m-%d").to_string();
+    let log_file_path = format!("storage/logs/rustbasic.log.{}", date_str);
+
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_file_path)
+    {
+        let file_line = format!("{} {} {}\n", timestamp, level_str, msg);
+        let _ = file.write_all(file_line.as_bytes());
+    }
 }
 
 fn print_banner() {
-    println!(r#"
-    
-    ██████╗ ██╗   ██╗███████╗████████╗██████╗  █████╗ ███████╗██╗ ██████╗
-    ██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██║██╔════╝
-    ██████╔╝██║   ██║███████╗   ██║   ██████╔╝███████║███████╗██║██║     
-    ██╔══██╗██║   ██║╚════██║   ██║   ██╔══██╗██╔══██║╚════██║██║██║     
-    ██║  ██║╚██████╔╝███████║   ██║   ██████╔╝██║  ██║███████║██║╚██████╗
-    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝
-    "#);
-    println!("    >> RustBasic Full-stack Framework - Version 2026 <<\n");
+    println!();
+    println!("    \x1b[38;5;208m██████╗ ██╗   ██╗███████╗████████╗\x1b[38;5;245m██████╗  █████╗ ███████╗██╗ ██████╗\x1b[0m");
+    println!("    \x1b[38;5;208m██╔══██╗██║   ██║██╔════╝╚══██╔══╝\x1b[38;5;245m██╔══██╗██╔══██╗██╔════╝██║██╔════╝\x1b[0m");
+    println!("    \x1b[38;5;208m██████╔╝██║   ██║███████╗   ██║   \x1b[38;5;245m██████╔╝███████║███████╗██║██║     \x1b[0m");
+    println!("    \x1b[38;5;208m██╔══██╗██║   ██║╚════██║   ██║   \x1b[38;5;245m██╔══██╗██╔══██║╚════██║██║██║     \x1b[0m");
+    println!("    \x1b[38;5;208m██║  ██║╚██████╔╝███████║   ██║   \x1b[38;5;245m██████╔╝██║  ██║███████║██║╚██████╗\x1b[0m");
+    println!("    \x1b[38;5;208m╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   \x1b[38;5;245m╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝\x1b[0m");
+    println!();
+    println!("    >> \x1b[1;38;5;208mRust\x1b[0m\x1b[1;38;5;245mBasic\x1b[0m Full-stack Framework - Version 2026 <<");
+    println!();
 }
+

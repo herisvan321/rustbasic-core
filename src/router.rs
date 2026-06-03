@@ -438,6 +438,27 @@ impl<S> Router<S> {
         self
     }
 
+    pub fn prefix(mut self, prefix: &str) -> Self {
+        let clean_prefix = prefix.trim_end_matches('/');
+        let clean_prefix = if clean_prefix.starts_with('/') {
+            clean_prefix.to_string()
+        } else {
+            format!("/{}", clean_prefix)
+        };
+        for route in &mut self.routes {
+            let mut path = route.path.clone();
+            if !path.starts_with('/') {
+                path = format!("/{}", path);
+            }
+            let new_path = format!("{}{}", clean_prefix, path);
+            *route = Arc::new(Route {
+                path: new_path,
+                handlers: route.handlers.clone(),
+            });
+        }
+        self
+    }
+
     pub fn layer(mut self, mw: crate::middleware::MiddlewareFn) -> Self {
         self.middlewares.push(mw);
         self

@@ -89,12 +89,21 @@ pub async fn init_sessions(cfg: &Config) {
     sqlx::any::install_default_drivers();
     let pool = AnyPool::connect(&db_url).await.expect("Gagal terhubung ke database session");
 
-    let sql = "CREATE TABLE IF NOT EXISTS sessions (
-        id VARCHAR(255) PRIMARY KEY,
-        payload TEXT NOT NULL,
-        last_activity BIGINT NOT NULL,
-        ip_address VARCHAR(45)
-    )";
+    let sql = if cfg.db_connection == "mysql" {
+        "CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(255) PRIMARY KEY,
+            payload VARCHAR(8000) NOT NULL,
+            last_activity BIGINT NOT NULL,
+            ip_address VARCHAR(45)
+        )"
+    } else {
+        "CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(255) PRIMARY KEY,
+            payload TEXT NOT NULL,
+            last_activity BIGINT NOT NULL,
+            ip_address VARCHAR(45)
+        )"
+    };
 
     sqlx::query(sql).execute(&pool).await.expect("Gagal membuat tabel session otomatis");
 }

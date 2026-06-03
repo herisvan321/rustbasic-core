@@ -124,8 +124,24 @@ impl Blueprint {
         ColumnBuilder::new(self)
     }
 
+
     pub fn text(&mut self, name: &str) -> ColumnBuilder<'_> {
         self.add_col(name, "TEXT");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn long_text(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "LONGTEXT");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn medium_text(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "MEDIUMTEXT");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn tiny_text(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "TINYTEXT");
         ColumnBuilder::new(self)
     }
 
@@ -136,6 +152,37 @@ impl Blueprint {
 
     pub fn big_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
         self.add_col(name, "BIGINT");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn unsigned_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "INT UNSIGNED");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn unsigned_big_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "BIGINT UNSIGNED");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn unsigned_medium_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "MEDIUMINT UNSIGNED");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn unsigned_small_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "SMALLINT UNSIGNED");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn unsigned_tiny_integer(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "TINYINT UNSIGNED");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn big_increments(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "BIG_INCREMENTS");
+        self.columns.last_mut().unwrap().primary_key = true;
         ColumnBuilder::new(self)
     }
 
@@ -169,8 +216,24 @@ impl Blueprint {
         ColumnBuilder::new(self)
     }
 
+    pub fn date(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "DATE");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn time(&mut self, name: &str) -> ColumnBuilder<'_> {
+        self.add_col(name, "TIME");
+        ColumnBuilder::new(self)
+    }
+
     pub fn timestamp(&mut self, name: &str) -> ColumnBuilder<'_> {
         self.add_col(name, "TIMESTAMP");
+        ColumnBuilder::new(self)
+    }
+
+    pub fn soft_deletes(&mut self) -> ColumnBuilder<'_> {
+        self.add_col("deleted_at", "DATETIME");
+        self.columns.last_mut().unwrap().nullable = true;
         ColumnBuilder::new(self)
     }
 
@@ -208,6 +271,35 @@ impl Blueprint {
         self
     }
 
+    fn map_col_type(&self, col_type: &str, is_mysql: bool) -> String {
+        let mut mapped = col_type.to_string();
+        if mapped == "BIG_INCREMENTS" {
+            if is_mysql {
+                return "BIGINT AUTO_INCREMENT".to_string();
+            } else {
+                return "INTEGER".to_string();
+            }
+        }
+        if is_mysql {
+            if mapped == "DATETIME" || mapped == "TIMESTAMP" {
+                mapped = "VARCHAR(255)".to_string();
+            } else if mapped == "DATE" {
+                mapped = "VARCHAR(10)".to_string();
+            } else if mapped == "TIME" {
+                mapped = "VARCHAR(8)".to_string();
+            }
+        } else {
+            if mapped == "DATETIME" || mapped == "TIMESTAMP" || mapped == "DATE" || mapped == "TIME" {
+                mapped = "TEXT".to_string();
+            } else if mapped.contains("TEXT") {
+                mapped = "TEXT".to_string();
+            } else if mapped.contains("UNSIGNED") {
+                mapped = "INTEGER".to_string();
+            }
+        }
+        mapped
+    }
+
     async fn to_alter_sqls(&self, pool: &AnyPool) -> Vec<String> {
         let mut sqls = Vec::new();
         let is_mysql = if let Ok(conn) = pool.acquire().await {
@@ -218,10 +310,7 @@ impl Blueprint {
 
         // 1. Tambah kolom baru
         for col in &self.columns {
-            let mut col_type = col.col_type.clone();
-            if !is_mysql && (col_type == "DATETIME" || col_type == "TIMESTAMP") {
-                col_type = "TEXT".to_string();
-            }
+            let col_type = self.map_col_type(&col.col_type, is_mysql);
             let mut col_def = format!("`{}` {}", col.name, col_type);
             if !col.nullable {
                 col_def.push_str(" NOT NULL");
@@ -266,10 +355,7 @@ impl Blueprint {
         }
 
         for col in &self.columns {
-            let mut col_type = col.col_type.clone();
-            if !is_mysql && (col_type == "DATETIME" || col_type == "TIMESTAMP") {
-                col_type = "TEXT".to_string();
-            }
+            let col_type = self.map_col_type(&col.col_type, is_mysql);
             let mut col_def = format!("`{}` {}", col.name, col_type);
             if col.primary_key && !self.auto_id {
                 col_def.push_str(" PRIMARY KEY");
@@ -288,8 +374,8 @@ impl Blueprint {
 
         if self.timestamps {
             if is_mysql {
-                col_parts.push("`created_at` DATETIME DEFAULT CURRENT_TIMESTAMP".to_string());
-                col_parts.push("`updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP".to_string());
+                col_parts.push("`created_at` VARCHAR(255) NOT NULL DEFAULT ''".to_string());
+                col_parts.push("`updated_at` VARCHAR(255) NOT NULL DEFAULT ''".to_string());
             } else {
                 col_parts.push("`created_at` TEXT DEFAULT CURRENT_TIMESTAMP".to_string());
                 col_parts.push("`updated_at` TEXT DEFAULT CURRENT_TIMESTAMP".to_string());

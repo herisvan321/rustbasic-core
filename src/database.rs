@@ -455,11 +455,23 @@ fn get_json_value(row: &sqlx::any::AnyRow, index: usize) -> Value {
         return Value::Null;
     }
 
-
-    if let Ok(Some(b)) = row.try_get::<Option<bool>, _>(index) {
-        return Value::Bool(b);
+    let type_name_upper = type_name.to_uppercase();
+    if type_name_upper.contains("DATETIME") || type_name_upper.contains("TIMESTAMP") || type_name_upper.contains("DATE") || type_name_upper.contains("TIME") {
+        if let Ok(Some(s)) = row.try_get::<Option<String>, _>(index) {
+            return Value::String(s);
+        }
+        if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index) {
+            if let Ok(s) = String::from_utf8(bytes) {
+                return Value::String(s);
+            }
+        }
+        // If SQLx Any driver fails to decode, return Null instead of throwing/panicking
+        return Value::Null;
     }
 
+    // IMPORTANT: Integer harus dicek SEBELUM bool.
+    // Di MySQL, SQLx Any driver bisa decode kolom INT sebagai bool (1 → true),
+    // yang menyebabkan id=1 terbaca sebagai true dan gagal deserialisasi ke i32.
     if let Ok(Some(i)) = row.try_get::<Option<i64>, _>(index) {
         return Value::Number(serde_json::Number::from(i));
     }
@@ -470,8 +482,18 @@ fn get_json_value(row: &sqlx::any::AnyRow, index: usize) -> Value {
         }
     }
 
+    if let Ok(Some(b)) = row.try_get::<Option<bool>, _>(index) {
+        return Value::Bool(b);
+    }
+
     if let Ok(Some(s)) = row.try_get::<Option<String>, _>(index) {
         return Value::String(s);
+    }
+
+    if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index) {
+        if let Ok(s) = String::from_utf8(bytes) {
+            return Value::String(s);
+        }
     }
 
     Value::Null

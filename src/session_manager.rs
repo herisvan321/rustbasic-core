@@ -55,7 +55,8 @@ impl RustBasicSessionStore {
         let query = self.get_placeholder_query(raw_query).await;
         let now = chrono::Utc::now().timestamp();
         
-        let row: Option<(String,)> = sqlx::query_as(&query)
+        use sqlx::Row;
+        let row_opt = sqlx::query(&query)
             .bind(id)
             .bind(now)
             .fetch_optional(&self.pool)
@@ -63,7 +64,17 @@ impl RustBasicSessionStore {
             .ok()
             .flatten();
 
-        row.map(|r| r.0)
+        if let Some(row) = row_opt {
+            if let Ok(s) = row.try_get::<String, _>(0) {
+                return Some(s);
+            }
+            if let Ok(bytes) = row.try_get::<Vec<u8>, _>(0) {
+                if let Ok(s) = String::from_utf8(bytes) {
+                    return Some(s);
+                }
+            }
+        }
+        None
     }
 
     pub async fn store(&self, id: &str, session_json: &str, ip: &str) {

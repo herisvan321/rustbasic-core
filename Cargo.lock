@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "rustbasic-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "bcrypt",
  "chrono",

@@ -149,24 +149,6 @@ pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
     env
 });
 
-/// Menghapus komentar HTML (<!-- ... -->) tanpa regex.
-/// Mendukung komentar multi-baris (ekuivalen dengan flag `(?s)` pada regex).
-fn strip_html_comments(html: &str) -> String {
-    let mut result = String::with_capacity(html.len());
-    let mut remaining = html;
-
-    while let Some(start) = remaining.find("<!--") {
-        result.push_str(&remaining[..start]);
-        if let Some(end) = remaining[start..].find("-->") {
-            remaining = &remaining[start + end + 3..];
-        } else {
-            // Komentar tidak ditutup — buang sisa string
-            break;
-        }
-    }
-    result.push_str(remaining);
-    result
-}
 
 // 3. Fungsi Helper untuk Render HTML Statis
 pub fn render(template: &str, context: minijinja::Value) -> Response {
@@ -229,17 +211,7 @@ fn render_internal(template: &str, context: minijinja::Value) -> Response {
     match JINJA.get_template(template) {
         Ok(tmpl) => match tmpl.render(context.clone()) {
             Ok(rendered) => {
-                // --- LOGIKA MINIFIKASI ---
-                let without_comments = strip_html_comments(&rendered);
-                
-                let minified = without_comments
-                    .lines()
-                    .map(|line| line.trim())
-                    .filter(|line| !line.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                
-                Html(minified).into_response()
+                Html(rendered).into_response()
             },
             Err(err) => {
                 tracing::error!("Gagal render template: {}", err);

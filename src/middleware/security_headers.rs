@@ -53,7 +53,9 @@ pub async fn security_headers_middleware(
              style-src 'self' 'unsafe-inline' http://localhost:{} http://127.0.0.1:{} {}https:; \
              font-src 'self' https: data:; \
              img-src 'self' data: https:; \
-             frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; \
+             frame-src 'self' https:; \
+             media-src 'self' https:; \
+             object-src 'self' https:; \
              connect-src 'self' ws://localhost:{} ws://127.0.0.1:{} http://localhost:{} http://127.0.0.1:{} {}https:;",
             port, port, extra_hosts,
             port, port, extra_hosts,
@@ -65,7 +67,9 @@ pub async fn security_headers_middleware(
          style-src 'self' 'unsafe-inline' https:; \
          font-src 'self' https: data:; \
          img-src 'self' data: https:; \
-         frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; \
+         frame-src 'self' https:; \
+         media-src 'self' https:; \
+         object-src 'self' https:; \
          connect-src 'self' https:;".to_string()
     };
     headers.insert(header::CONTENT_SECURITY_POLICY, csp.parse().unwrap());

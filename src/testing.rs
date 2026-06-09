@@ -16,6 +16,15 @@ pub struct TestClient {
 
 impl TestClient {
     pub async fn new(cfg: Config, router: Router<AppState>) -> Self {
+        // Populate named routes
+        let mut routes_map = std::collections::HashMap::new();
+        for r in &router.routes {
+            if let Some(ref name) = r.name {
+                routes_map.insert(name.clone(), r.path.clone());
+            }
+        }
+        let _ = crate::router::NAMED_ROUTES.set(routes_map);
+
         // 1. Hubungkan Database
         let db = crate::database::connect(&cfg).await;
         

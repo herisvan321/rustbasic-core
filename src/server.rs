@@ -58,6 +58,15 @@ pub async fn start_server(
     db: AnyPool,
     app_router: Router<AppState>,
 ) {
+    // Populate named routes
+    let mut routes_map = std::collections::HashMap::new();
+    for r in &app_router.routes {
+        if let Some(ref name) = r.name {
+            routes_map.insert(name.clone(), r.path.clone());
+        }
+    }
+    let _ = crate::router::NAMED_ROUTES.set(routes_map);
+
     // 0. Kill port jika sedang digunakan (Force Restart)
     kill_port_if_in_use(cfg.app_port);
 

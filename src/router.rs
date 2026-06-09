@@ -324,7 +324,15 @@ pub struct Router<S = ()> {
 pub struct Route {
     pub path: String,
     pub handlers: Vec<(http::Method, Arc<dyn ErasedHandler>)>,
+    pub name: Option<String>,
 }
+
+pub static NAMED_ROUTES: std::sync::OnceLock<std::collections::HashMap<String, String>> = std::sync::OnceLock::new();
+
+pub fn get_named_routes() -> std::collections::HashMap<String, String> {
+    NAMED_ROUTES.get().cloned().unwrap_or_default()
+}
+
 
 struct MiddlewareHandler {
     mw: crate::middleware::MiddlewareFn,
@@ -353,7 +361,20 @@ impl<S> Router<S> {
         self.routes.push(Arc::new(Route {
             path: path.to_string(),
             handlers: method_router.handlers,
+            name: None,
         }));
+        self
+    }
+
+    pub fn name(mut self, name: &str) -> Self {
+        if let Some(route) = self.routes.last_mut() {
+            let new_route = Route {
+                path: route.path.clone(),
+                handlers: route.handlers.clone(),
+                name: Some(name.to_string()),
+            };
+            *route = Arc::new(new_route);
+        }
         self
     }
 
@@ -408,6 +429,7 @@ impl<S> Router<S> {
             self.routes.push(Arc::new(Route {
                 path: other_route.path.clone(),
                 handlers: handlers_with_mw,
+                name: other_route.name.clone(),
             }));
         }
         self
@@ -433,6 +455,7 @@ impl<S> Router<S> {
             self.routes.push(Arc::new(Route {
                 path: nested_path,
                 handlers: handlers_with_mw,
+                name: other_route.name.clone(),
             }));
         }
         self
@@ -454,6 +477,7 @@ impl<S> Router<S> {
             *route = Arc::new(Route {
                 path: new_path,
                 handlers: route.handlers.clone(),
+                name: route.name.clone(),
             });
         }
         self

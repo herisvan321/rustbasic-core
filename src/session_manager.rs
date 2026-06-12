@@ -1,4 +1,4 @@
-use sqlx::AnyPool;
+use crate::sql::AnyPool;
 
 /// Mengganti placeholder Postgres ($1, $2, ...) dengan placeholder MySQL (?).
 /// Implementasi manual tanpa regex — iterasi karakter satu kali (O(n)).
@@ -53,10 +53,9 @@ impl RustBasicSessionStore {
     pub async fn load(&self, id: &str) -> Option<String> {
         let raw_query = "SELECT payload FROM sessions WHERE id = $1 AND last_activity > $2";
         let query = self.get_placeholder_query(raw_query).await;
-        let now = chrono::Utc::now().timestamp();
+        let now = crate::chrono::Utc::now().timestamp();
         
-        use sqlx::Row;
-        let row_opt = sqlx::query(&query)
+        let row_opt = crate::sql::query(&query)
             .bind(id)
             .bind(now)
             .fetch_optional(&self.pool)
@@ -80,13 +79,13 @@ impl RustBasicSessionStore {
     pub async fn store(&self, id: &str, session_json: &str, ip: &str) {
         let raw_delete_query = "DELETE FROM sessions WHERE id = $1";
         let delete_query = self.get_placeholder_query(raw_delete_query).await;
-        let _ = sqlx::query(&delete_query).bind(id).execute(&self.pool).await;
+        let _ = crate::sql::query(&delete_query).bind(id).execute(&self.pool).await;
 
         let raw_insert_query = "INSERT INTO sessions (id, payload, last_activity, ip_address) VALUES ($1, $2, $3, $4)";
         let insert_query = self.get_placeholder_query(raw_insert_query).await;
-        let expires = chrono::Utc::now().timestamp() + 14 * 24 * 60 * 60; // 14 hari
+        let expires = crate::chrono::Utc::now().timestamp() + 14 * 24 * 60 * 60; // 14 hari
 
-        let _ = sqlx::query(&insert_query)
+        let _ = crate::sql::query(&insert_query)
             .bind(id)
             .bind(session_json)
             .bind(expires)

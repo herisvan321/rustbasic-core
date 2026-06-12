@@ -406,7 +406,7 @@ impl<S> Router<S> {
         self.route(path, get(move |req: Request| {
             let ctx = context_clone.clone();
             async move {
-                crate::view::view(&req, template, minijinja::Value::from_serialize(ctx))
+                crate::view::view(&req, template, ctx)
             }
         }))
     }

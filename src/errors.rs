@@ -1,6 +1,6 @@
 use crate::view::render;
 use crate::router::{IntoResponse, Response};
-use minijinja::context;
+use serde_json::json;
 use http::StatusCode;
 
 pub struct ErrorController;
@@ -22,11 +22,11 @@ impl ErrorController {
             _ => "Error",
         };
 
-        (status, render("errors/minimal.rb.html", context! {
-            code => code,
-            title => title,
-            message => message
-        })).into_response()
+        (status, render("errors/minimal.rb.html", json!({
+            "code": code,
+            "title": title,
+            "message": message
+        }))).into_response()
     }
 
     /// Khusus untuk 404 Not Found (digunakan sebagai fallback)

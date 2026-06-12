@@ -69,7 +69,10 @@ macro_rules! model {
             $($(#[$field_meta:meta])* $field_vis:vis $field_name:ident : $field_type:ty),* $(,)?
         }
     ) => {
-        #[derive(Clone, Debug, PartialEq, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        use $crate::serde as _serde;
+
+        #[derive(Clone, Debug, PartialEq, _serde::Serialize, _serde::Deserialize)]
+        #[serde(crate = "_serde")]
         pub struct Model {
             $($(#[$field_meta])* $field_vis $field_name : $field_type,)*
         }
@@ -99,7 +102,7 @@ macro_rules! model {
         }
 
         impl<'a> ModelQuery<'a> {
-            pub fn new(db: &'a $crate::sqlx::AnyPool) -> Self {
+            pub fn new(db: &'a $crate::sql::AnyPool) -> Self {
                 Self {
                     builder: Model::query(db),
                     relations: Vec::new(),
@@ -111,12 +114,12 @@ macro_rules! model {
                 self
             }
 
-            pub fn where_(mut self, column: &str, value: impl serde::Serialize) -> Self {
+            pub fn where_(mut self, column: &str, value: impl $crate::serde::Serialize) -> Self {
                 self.builder = self.builder.where_(column, value);
                 self
             }
 
-            pub fn where_op(mut self, column: &str, operator: &str, value: impl serde::Serialize) -> Self {
+            pub fn where_op(mut self, column: &str, operator: &str, value: impl $crate::serde::Serialize) -> Self {
                 self.builder = self.builder.where_op(column, operator, value);
                 self
             }
@@ -136,7 +139,7 @@ macro_rules! model {
                 self
             }
 
-            pub async fn get(self) -> Result<Vec<Model>, $crate::sqlx::Error> {
+            pub async fn get(self) -> Result<Vec<Model>, $crate::sql::Error> {
                 let db = self.builder.pool();
                 let mut models = self.builder.get::<Model>().await?;
 
@@ -157,7 +160,7 @@ macro_rules! model {
                 Ok(models)
             }
 
-            pub async fn first(self) -> Result<Option<Model>, $crate::sqlx::Error> {
+            pub async fn first(self) -> Result<Option<Model>, $crate::sql::Error> {
                 let mut models = self.get().await?;
                 if models.is_empty() {
                     Ok(None)
@@ -169,12 +172,12 @@ macro_rules! model {
 
         impl Model {
             /// Mulai memuat relasi secara eager (Model::with([...]))
-            pub fn with<'a>(db: &'a $crate::sqlx::AnyPool, relations: &[&str]) -> ModelQuery<'a> {
+            pub fn with<'a>(db: &'a $crate::sql::AnyPool, relations: &[&str]) -> ModelQuery<'a> {
                 ModelQuery::new(db).with(relations)
             }
 
             /// Mulai Query Builder baru untuk tabel model ini (Model::query())
-            pub fn query<'a>(db: &'a $crate::sqlx::AnyPool) -> $crate::database::QueryBuilder<'a> {
+            pub fn query<'a>(db: &'a $crate::sql::AnyPool) -> $crate::database::QueryBuilder<'a> {
                 let mut q = $crate::database::DB::table(db, $table_name);
                 let mut has_soft_deletes = false;
                 $(
@@ -200,32 +203,32 @@ macro_rules! model {
             }
 
             /// Mulai query builder tanpa menerapkan scope global apa pun (termasuk soft deletes)
-            pub fn query_without_global_scopes<'a>(db: &'a $crate::sqlx::AnyPool) -> $crate::database::QueryBuilder<'a> {
+            pub fn query_without_global_scopes<'a>(db: &'a $crate::sql::AnyPool) -> $crate::database::QueryBuilder<'a> {
                 $crate::database::DB::table(db, $table_name)
             }
 
             /// Ambil semua catatan dari model ini (Model::all())
-            pub async fn all(db: &$crate::sqlx::AnyPool) -> Result<Vec<Self>, $crate::sqlx::Error> {
+            pub async fn all(db: &$crate::sql::AnyPool) -> Result<Vec<Self>, $crate::sql::Error> {
                 Self::query(db).get::<Self>().await
             }
 
             /// Ambil catatan pertama dari model ini (Model::first())
-            pub async fn first(db: &$crate::sqlx::AnyPool) -> Result<Option<Self>, $crate::sqlx::Error> {
+            pub async fn first(db: &$crate::sql::AnyPool) -> Result<Option<Self>, $crate::sql::Error> {
                 Self::query(db).first::<Self>().await
             }
 
             /// Cari catatan berdasarkan ID numeriknya (Model::find($id))
-            pub async fn find(db: &$crate::sqlx::AnyPool, id: i32) -> Result<Option<Self>, $crate::sqlx::Error> {
+            pub async fn find(db: &$crate::sql::AnyPool, id: i32) -> Result<Option<Self>, $crate::sql::Error> {
                 Self::query(db).where_("id", id).first::<Self>().await
             }
 
             /// Mengambil total jumlah data dari model ini (Model::count())
-            pub async fn count(db: &$crate::sqlx::AnyPool) -> Result<i64, $crate::sqlx::Error> {
+            pub async fn count(db: &$crate::sql::AnyPool) -> Result<i64, $crate::sql::Error> {
                 Self::query(db).count().await
             }
 
             /// Menghapus data berdasarkan ID (Model::destroy($id))
-            pub async fn destroy(db: &$crate::sqlx::AnyPool, id: i32) -> Result<u64, $crate::sqlx::Error> {
+            pub async fn destroy(db: &$crate::sql::AnyPool, id: i32) -> Result<u64, $crate::sql::Error> {
                 let mut has_soft_deletes = false;
                 $(
                     if $sd {
@@ -245,17 +248,17 @@ macro_rules! model {
             }
 
             /// Mulai query builder dengan menyertakan data yang telah dihapus secara lunak (Model::withTrashed())
-            pub fn query_with_trashed<'a>(db: &'a $crate::sqlx::AnyPool) -> $crate::database::QueryBuilder<'a> {
+            pub fn query_with_trashed<'a>(db: &'a $crate::sql::AnyPool) -> $crate::database::QueryBuilder<'a> {
                 $crate::database::DB::table(db, $table_name)
             }
 
             /// Mulai query builder hanya untuk data yang telah dihapus secara lunak (Model::onlyTrashed())
-            pub fn query_only_trashed<'a>(db: &'a $crate::sqlx::AnyPool) -> $crate::database::QueryBuilder<'a> {
+            pub fn query_only_trashed<'a>(db: &'a $crate::sql::AnyPool) -> $crate::database::QueryBuilder<'a> {
                 $crate::database::DB::table(db, $table_name).where_raw("`deleted_at` IS NOT NULL", vec![])
             }
 
             /// Memulihkan data yang telah dihapus secara lunak ($model->restore())
-            pub async fn restore(db: &$crate::sqlx::AnyPool, id: i32) -> Result<u64, $crate::sqlx::Error> {
+            pub async fn restore(db: &$crate::sql::AnyPool, id: i32) -> Result<u64, $crate::sql::Error> {
                 $crate::database::DB::table(db, $table_name)
                     .where_("id", id)
                     .update($crate::serde_json::json!({
@@ -265,20 +268,20 @@ macro_rules! model {
             }
 
             /// Menghapus data secara permanen ($model->force_destroy(id))
-            pub async fn force_destroy(db: &$crate::sqlx::AnyPool, id: i32) -> Result<u64, $crate::sqlx::Error> {
+            pub async fn force_destroy(db: &$crate::sql::AnyPool, id: i32) -> Result<u64, $crate::sql::Error> {
                 $crate::database::DB::table(db, $table_name).where_("id", id).delete().await
             }
 
             $(
                 $(
-                    pub fn $scope_name<'a>(db: &'a $crate::sqlx::AnyPool, $($arg_name: $arg_type),*) -> $crate::database::QueryBuilder<'a> {
+                    pub fn $scope_name<'a>(db: &'a $crate::sql::AnyPool, $($arg_name: $arg_type),*) -> $crate::database::QueryBuilder<'a> {
                         use self::ModelScopes;
                         Self::query(db).$scope_name($($arg_name),*)
                     }
                 )*
             )?
 
-            pub async fn create(db: &$crate::sqlx::AnyPool, mut data: $crate::serde_json::Value) -> Result<Self, $crate::sqlx::Error> {
+            pub async fn create(db: &$crate::sql::AnyPool, mut data: $crate::serde_json::Value) -> Result<Self, $crate::sql::Error> {
                 let mut data_to_insert = data.clone();
 
                 // Terapkan penyaringan Fillable jika didefinisikan
@@ -320,7 +323,7 @@ macro_rules! model {
                     }
                 }
                 let parsed = $crate::serde_json::from_value::<Self>(data)
-                    .map_err(|e| $crate::sqlx::Error::Protocol(format!("Deserialization error: {}", e)))?;
+                    .map_err(|e| $crate::sql::Error::Protocol(format!("Deserialization error: {}", e)))?;
                 Ok(parsed)
             }
         }
@@ -337,7 +340,7 @@ macro_rules! seeder {
 
         #[$crate::async_trait]
         impl $crate::seeder::SeederTrait for $name {
-            async fn run<'a>(&'a self, $db: &'a $crate::sqlx::AnyPool) -> Result<(), $crate::sqlx::Error> $body
+            async fn run<'a>(&'a self, $db: &'a $crate::sql::AnyPool) -> Result<(), $crate::sql::Error> $body
         }
     };
 

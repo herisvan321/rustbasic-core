@@ -8,6 +8,8 @@ pub trait Colorize {
     fn white(&self) -> String;
     fn bold(&self) -> String;
     fn dimmed(&self) -> String;
+    fn italic(&self) -> String;
+    fn on_black(&self) -> String;
 }
 
 impl<T: std::fmt::Display> Colorize for T {
@@ -37,5 +39,11 @@ impl<T: std::fmt::Display> Colorize for T {
     }
     fn dimmed(&self) -> String {
         format!("\x1b[2m{}\x1b[0m", self)
+    }
+    fn italic(&self) -> String {
+        format!("\x1b[3m{}\x1b[0m", self)
+    }
+    fn on_black(&self) -> String {
+        format!("\x1b[40m{}\x1b[0m", self)
     }
 }

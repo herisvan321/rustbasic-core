@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.1.23"
+version = "0.1.24"
 build = false
 autolib = false
 autobins = false
@@ -45,27 +45,6 @@ features = ["server", "tokio"]
 [dependencies.http-body-util]
 version = "0.1"
 
-[dependencies.bcrypt]
-version = "0.19.1"
-
-[dependencies.chrono]
-version = "0.4.39"
-features = ["serde"]
-
-[dependencies.chrono-tz]
-version = "0.10.0"
-
-
-[dependencies.minijinja]
-version = "2.19.0"
-features = ["loader", "json"]
-
-[dependencies.rand]
-version = "0.10.1"
-
-
-[dependencies.rust-embed]
-version = "8.11.0"
 
 
 [dependencies.serde]
@@ -75,11 +54,9 @@ features = ["derive"]
 [dependencies.serde_json]
 version = "1.0.140"
 
+[dependencies.regex]
+version = "1.10"
 
-[dependencies.sqlx]
-version = "0.8.3"
-features = ["runtime-tokio", "tls-rustls", "sqlite", "mysql", "any", "chrono"]
-default-features = false
 
 [dependencies.tokio]
 version = "1.52.1"
@@ -89,12 +66,49 @@ features = ["full"]
 version = "0.12"
 features = ["json", "rustls-tls"]
 default-features = false
+optional = true
 
 [dependencies.lettre]
 version = "0.11"
 features = ["tokio1-rustls-tls", "smtp-transport", "builder"]
 default-features = false
+optional = true
 
 [dependencies.rustbasic-core-macro]
 path = "macro"
-version = "0.1.0"
+version = "0.1.1"
+
+[dependencies.jsonwebtoken]
+version = "9.3.0"
+optional = true
+
+[dependencies.image]
+version = "0.25.5"
+optional = true
+
+[dependencies.webp]
+version = "0.3.0"
+optional = true
+
+[dependencies.sha2]
+version = "0.10.8"
+optional = true
+
+[features]
+default = ["sqlite"]
+sqlite = []
+sqlite-bundled = ["sqlite"]
+mysql = []
+mail = ["dep:lettre"]
+http-client = ["dep:reqwest"]
+jwt = ["dep:jsonwebtoken"]
+image-processing = ["dep:image", "dep:webp", "dep:sha2"]
+
+
+[[test]]
+name = "template_tests"
+path = "tests/template_tests.rs"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"

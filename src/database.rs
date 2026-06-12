@@ -1,6 +1,7 @@
 use crate::Config;
+#[cfg(feature = "mysql")]
 use crate::colored::Colorize;
-use sqlx::{AnyPool, Row, Column, TypeInfo};
+use crate::sql::{self, AnyPool};
 use serde_json::Value;
 use serde::de::DeserializeOwned;
 
@@ -14,13 +15,14 @@ pub async fn connect(cfg: &Config) -> AnyPool {
         format!("sqlite:database/{}.sqlite?mode=rwc", cfg.db_database)
     };
 
-    sqlx::any::install_default_drivers();
+    sql::any::install_default_drivers();
 
     let db_url_ref: &str = &db_url;
     match AnyPool::connect(db_url_ref).await {
         Ok(pool) => pool,
         Err(e) => {
             let err_msg = e.to_string();
+            #[cfg(feature = "mysql")]
             if (err_msg.contains("1049") || err_msg.contains("Unknown database")) && cfg.db_connection == "mysql" {
                 println!("{}", "⚠️  Database tidak ditemukan. Mencoba membuat database baru...".yellow());
                 
@@ -29,14 +31,15 @@ pub async fn connect(cfg: &Config) -> AnyPool {
                     cfg.db_username, cfg.db_password, cfg.db_host, cfg.db_port
                 );
                 
-                if let Ok(pool) = sqlx::MySqlPool::connect(&root_url).await {
+                if let Ok(pool) = sql::MySqlPool::connect(&root_url).await {
                     let create_query = format!("CREATE DATABASE IF NOT EXISTS `{}`", cfg.db_database);
-                    if sqlx::query(&create_query).execute(&pool).await.is_ok() {
+                    if sql::query(&create_query).execute(&pool).await.is_ok() {
                         println!("✅ Database '{}' berhasil dibuat.", cfg.db_database.green());
                         return AnyPool::connect(&db_url).await.expect("Gagal terhubung setelah membuat database");
                     }
                 }
             }
+            let _ = err_msg; // suppress unused warning when mysql feature is disabled
             panic!("Gagal terhubung ke database: {:?}", e);
         }
     }
@@ -181,12 +184,12 @@ impl<'a> QueryBuilder<'a> {
         (sql, binds)
     }
 
-    pub async fn first<T: DeserializeOwned>(&self) -> Result<Option<T>, sqlx::Error> {
+    pub async fn first<T: DeserializeOwned>(&self) -> Result<Option<T>, sql::Error> {
         let mut builder = self.clone();
         builder.limit = Some(1);
         let (sql, binds) = builder.to_select_sql();
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -195,17 +198,17 @@ impl<'a> QueryBuilder<'a> {
         if let Some(row) = row_opt {
             let val = row_to_json_value(&row);
             let parsed = serde_json::from_value::<T>(val)
-                .map_err(|e| sqlx::Error::Protocol(format!("Deserialization error: {}", e)))?;
+                .map_err(|e| sql::Error::Protocol(format!("Deserialization error: {}", e)))?;
             Ok(Some(parsed))
         } else {
             Ok(None)
         }
     }
 
-    pub async fn get<T: DeserializeOwned>(&self) -> Result<Vec<T>, sqlx::Error> {
+    pub async fn get<T: DeserializeOwned>(&self) -> Result<Vec<T>, sql::Error> {
         let (sql, binds) = self.to_select_sql();
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -215,13 +218,13 @@ impl<'a> QueryBuilder<'a> {
         for row in rows {
             let val = row_to_json_value(&row);
             let parsed = serde_json::from_value::<T>(val)
-                .map_err(|e| sqlx::Error::Protocol(format!("Deserialization error: {}", e)))?;
+                .map_err(|e| sql::Error::Protocol(format!("Deserialization error: {}", e)))?;
             result.push(parsed);
         }
         Ok(result)
     }
 
-    pub async fn count(&self) -> Result<i64, sqlx::Error> {
+    pub async fn count(&self) -> Result<i64, sql::Error> {
         let mut sql = format!("SELECT COUNT(*) FROM `{}`", self.table);
         let mut binds = Vec::new();
 
@@ -243,7 +246,7 @@ impl<'a> QueryBuilder<'a> {
             sql.push_str(&parts.join(" AND "));
         }
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -253,9 +256,9 @@ impl<'a> QueryBuilder<'a> {
         Ok(count_val)
     }
 
-    pub async fn insert(&self, data: Value) -> Result<(), sqlx::Error> {
+    pub async fn insert(&self, data: Value) -> Result<(), sql::Error> {
         let obj = data.as_object().ok_or_else(|| {
-            sqlx::Error::Protocol("Data insert harus berupa JSON object".into())
+            sql::Error::Protocol("Data insert harus berupa JSON object".into())
         })?;
 
         let mut columns = Vec::new();
@@ -275,7 +278,7 @@ impl<'a> QueryBuilder<'a> {
             placeholders.join(", ")
         );
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -284,9 +287,9 @@ impl<'a> QueryBuilder<'a> {
         Ok(())
     }
 
-    pub async fn insert_get_id(&self, data: Value) -> Result<i64, sqlx::Error> {
+    pub async fn insert_get_id(&self, data: Value) -> Result<i64, sql::Error> {
         let obj = data.as_object().ok_or_else(|| {
-            sqlx::Error::Protocol("Data insert harus berupa JSON object".into())
+            sql::Error::Protocol("Data insert harus berupa JSON object".into())
         })?;
 
         let mut columns = Vec::new();
@@ -308,7 +311,7 @@ impl<'a> QueryBuilder<'a> {
 
         let mut conn = self.pool.acquire().await?;
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -321,7 +324,7 @@ impl<'a> QueryBuilder<'a> {
         }
         
         // Fallback for SQLite when using SQLx Any driver
-        if let Ok(row) = sqlx::query("SELECT last_insert_rowid()").fetch_one(&mut *conn).await {
+        if let Ok(row) = sql::query("SELECT last_insert_rowid()").fetch_one(&mut *conn).await {
             let id: i64 = row.try_get(0).unwrap_or(0);
             if id != 0 {
                 return Ok(id);
@@ -329,7 +332,7 @@ impl<'a> QueryBuilder<'a> {
         }
         
         // Fallback for MySQL when using SQLx Any driver
-        if let Ok(row) = sqlx::query("SELECT LAST_INSERT_ID()").fetch_one(&mut *conn).await {
+        if let Ok(row) = sql::query("SELECT LAST_INSERT_ID()").fetch_one(&mut *conn).await {
             let id: i64 = row.try_get(0).unwrap_or(0);
             if id != 0 {
                 return Ok(id);
@@ -339,9 +342,9 @@ impl<'a> QueryBuilder<'a> {
         Ok(0)
     }
 
-    pub async fn update(&self, data: Value) -> Result<u64, sqlx::Error> {
+    pub async fn update(&self, data: Value) -> Result<u64, sql::Error> {
         let obj = data.as_object().ok_or_else(|| {
-            sqlx::Error::Protocol("Data update harus berupa JSON object".into())
+            sql::Error::Protocol("Data update harus berupa JSON object".into())
         })?;
 
         let mut sets = Vec::new();
@@ -372,7 +375,7 @@ impl<'a> QueryBuilder<'a> {
             sql.push_str(&parts.join(" AND "));
         }
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -381,7 +384,7 @@ impl<'a> QueryBuilder<'a> {
         Ok(result.rows_affected())
     }
 
-    pub async fn delete(&self) -> Result<u64, sqlx::Error> {
+    pub async fn delete(&self) -> Result<u64, sql::Error> {
         let mut sql = format!("DELETE FROM `{}`", self.table);
         let mut binds = Vec::new();
 
@@ -403,7 +406,7 @@ impl<'a> QueryBuilder<'a> {
             sql.push_str(&parts.join(" AND "));
         }
 
-        let mut query = sqlx::query(&sql);
+        let mut query = sql::query(&sql);
         for b in &binds {
             query = bind_query_json(query, b);
         }
@@ -418,9 +421,9 @@ impl<'a> QueryBuilder<'a> {
 // -------------------------------------------------------------
 
 fn bind_query_json<'q>(
-    query: sqlx::query::Query<'q, sqlx::Any, sqlx::any::AnyArguments<'q>>,
+    query: sql::query::Query<'q, sql::Any, sql::any::AnyArguments<'q>>,
     val: &Value,
-) -> sqlx::query::Query<'q, sqlx::Any, sqlx::any::AnyArguments<'q>> {
+) -> sql::query::Query<'q, sql::Any, sql::any::AnyArguments<'q>> {
     match val {
         Value::Null => query.bind(None::<String>),
         Value::Bool(b) => query.bind(*b),
@@ -438,7 +441,7 @@ fn bind_query_json<'q>(
     }
 }
 
-pub fn row_to_json_value(row: &sqlx::any::AnyRow) -> Value {
+pub fn row_to_json_value(row: &sql::any::AnyRow) -> Value {
     let mut map = serde_json::Map::new();
     for i in 0..row.len() {
         let col = row.column(i);
@@ -449,7 +452,7 @@ pub fn row_to_json_value(row: &sqlx::any::AnyRow) -> Value {
     Value::Object(map)
 }
 
-fn get_json_value(row: &sqlx::any::AnyRow, index: usize) -> Value {
+fn get_json_value(row: &sql::any::AnyRow, index: usize) -> Value {
     let type_name = row.column(index).type_info().name();
     if type_name == "NULL" {
         return Value::Null;

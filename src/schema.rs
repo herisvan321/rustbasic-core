@@ -1,6 +1,6 @@
-use sqlx::{AnyPool, Row};
+use crate::sql::{self, AnyPool};
 
-pub type DbErr = sqlx::Error;
+pub type DbErr = crate::sql::Error;
 
 pub struct SchemaManager<'a> {
     pub pool: &'a AnyPool,
@@ -24,7 +24,7 @@ impl Schema {
 
         let sqls = blueprint.to_create_sqls(manager.pool).await;
         for sql in sqls {
-            sqlx::query::<sqlx::Any>(&sql).execute(manager.pool).await?;
+            sql::query::<sql::Any>(&sql).execute(manager.pool).await?;
         }
         Ok(())
     }
@@ -40,14 +40,14 @@ impl Schema {
 
         let sqls = blueprint.to_alter_sqls(manager.pool).await;
         for sql in sqls {
-            sqlx::query::<sqlx::Any>(&sql).execute(manager.pool).await?;
+            sql::query::<sql::Any>(&sql).execute(manager.pool).await?;
         }
         Ok(())
     }
 
     pub async fn drop(manager: &SchemaManager<'_>, table_name: &str) -> Result<(), DbErr> {
         let sql = format!("DROP TABLE IF EXISTS `{}`", table_name);
-        sqlx::query(&sql).execute(manager.pool).await?;
+        sql::query(&sql).execute(manager.pool).await?;
         Ok(())
     }
 }
@@ -533,13 +533,13 @@ pub trait MigratorTrait {
         let manager = SchemaManager::new(pool);
         
         // 1. Setup migration history table
-        sqlx::query::<sqlx::Any>("CREATE TABLE IF NOT EXISTS migration_history (
+        sql::query::<sql::Any>("CREATE TABLE IF NOT EXISTS migration_history (
             version VARCHAR(255) PRIMARY KEY,
             applied_at BIGINT NOT NULL
         )").execute(pool).await?;
 
         // 2. Fetch applied migrations
-        let rows = sqlx::query::<sqlx::Any>("SELECT version FROM migration_history").fetch_all(pool).await?;
+        let rows = sql::query::<sql::Any>("SELECT version FROM migration_history").fetch_all(pool).await?;
         let applied: std::collections::HashSet<String> = rows.into_iter()
             .map(|r| r.get::<String, _>("version"))
             .collect();
@@ -549,8 +549,8 @@ pub trait MigratorTrait {
             let name = migration.name();
             if !applied.contains(name) {
                 migration.up(&manager).await?;
-                let now = chrono::Utc::now().timestamp();
-                sqlx::query::<sqlx::Any>("INSERT INTO migration_history (version, applied_at) VALUES (?, ?)")
+                let now = crate::chrono::Utc::now().timestamp();
+                sql::query::<sql::Any>("INSERT INTO migration_history (version, applied_at) VALUES (?, ?)")
                     .bind(name)
                     .bind(now)
                     .execute(pool)
@@ -566,7 +566,7 @@ pub trait MigratorTrait {
         let manager = SchemaManager::new(pool);
         
         // Get the last applied migration
-        let row_opt = sqlx::query::<sqlx::Any>("SELECT version FROM migration_history ORDER BY applied_at DESC LIMIT 1")
+        let row_opt = sql::query::<sql::Any>("SELECT version FROM migration_history ORDER BY applied_at DESC LIMIT 1")
             .fetch_optional(pool)
             .await?;
 
@@ -575,7 +575,7 @@ pub trait MigratorTrait {
             for migration in Self::migrations() {
                 if migration.name() == version {
                     migration.down(&manager).await?;
-                    sqlx::query::<sqlx::Any>("DELETE FROM migration_history WHERE version = ?")
+                    sql::query::<sql::Any>("DELETE FROM migration_history WHERE version = ?")
                         .bind(&version)
                         .execute(pool)
                         .await?;
@@ -594,7 +594,7 @@ pub trait MigratorTrait {
         let manager = SchemaManager::new(pool);
         
         // 1. Rollback all migrations in reverse order
-        let applied_rows = sqlx::query::<sqlx::Any>("SELECT version FROM migration_history ORDER BY applied_at DESC")
+        let applied_rows = sql::query::<sql::Any>("SELECT version FROM migration_history ORDER BY applied_at DESC")
             .fetch_all(pool)
             .await
             .unwrap_or_default();
@@ -608,7 +608,7 @@ pub trait MigratorTrait {
         }
 
         // 2. Drop migration history table
-        let _ = sqlx::query::<sqlx::Any>("DROP TABLE IF EXISTS migration_history").execute(pool).await;
+        let _ = sql::query::<sql::Any>("DROP TABLE IF EXISTS migration_history").execute(pool).await;
 
         // 3. Rerun migrations
         Self::up(pool, None).await?;

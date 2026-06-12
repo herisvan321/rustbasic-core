@@ -1,6 +1,6 @@
 use crate::Config;
 use crate::session_manager::RustBasicSessionStore;
-use sqlx::AnyPool;
+use crate::sql::{self, AnyPool};
 use std::sync::Arc;
 use std::sync::Mutex;
 use serde_json::Value;
@@ -52,22 +52,27 @@ pub async fn setup_session(cfg: &Config) -> RustBasicSessionStore {
         format!("sqlite:database/{}.sqlite?mode=rwc", cfg.db_database)
     };
 
-    sqlx::any::install_default_drivers();
+    sql::any::install_default_drivers();
     let session_pool = match AnyPool::connect(&session_db_url).await {
         Ok(pool) => pool,
         Err(e) => {
-            let err_msg = e.to_string();
-            if (err_msg.contains("1049") || err_msg.contains("Unknown database")) && cfg.db_connection == "mysql" {
-                let root_url = format!("mysql://{}:{}@{}:{}", cfg.db_username, cfg.db_password, cfg.db_host, cfg.db_port);
-                if let Ok(root_pool) = sqlx::MySqlPool::connect(&root_url).await {
-                    let _ = sqlx::query(&format!("CREATE DATABASE IF NOT EXISTS `{}`", cfg.db_database)).execute(&root_pool).await;
-                    AnyPool::connect(&session_db_url).await.expect("Gagal terhubung setelah membuat DB session")
+            #[cfg(feature = "mysql")]
+            {
+                let err_msg = e.to_string();
+                if (err_msg.contains("1049") || err_msg.contains("Unknown database")) && cfg.db_connection == "mysql" {
+                    let root_url = format!("mysql://{}:{}@{}:{}", cfg.db_username, cfg.db_password, cfg.db_host, cfg.db_port);
+                    if let Ok(root_pool) = sql::MySqlPool::connect(&root_url).await {
+                        let _ = sql::query(&format!("CREATE DATABASE IF NOT EXISTS `{}`", cfg.db_database)).execute(&root_pool).await;
+                        AnyPool::connect(&session_db_url).await.expect("Gagal terhubung setelah membuat DB session")
+                    } else {
+                        panic!("Gagal membuat database session otomatis: {:?}", e);
+                    }
                 } else {
-                    panic!("Gagal membuat database session otomatis: {:?}", e);
+                    panic!("Gagal terhubung ke database session: {:?}", e);
                 }
-            } else {
-                panic!("Gagal terhubung ke database session: {:?}", e);
             }
+            #[cfg(not(feature = "mysql"))]
+            panic!("Gagal terhubung ke database session: {:?}", e);
         }
     };
     
@@ -86,7 +91,7 @@ pub async fn init_sessions(cfg: &Config) {
         format!("sqlite:database/{}.sqlite?mode=rwc", cfg.db_database)
     };
 
-    sqlx::any::install_default_drivers();
+    sql::any::install_default_drivers();
     let pool = AnyPool::connect(&db_url).await.expect("Gagal terhubung ke database session");
 
     let sql = if cfg.db_connection == "mysql" {
@@ -105,5 +110,5 @@ pub async fn init_sessions(cfg: &Config) {
         )"
     };
 
-    sqlx::query(sql).execute(&pool).await.expect("Gagal membuat tabel session otomatis");
+    sql::query(sql).execute(&pool).await.expect("Gagal membuat tabel session otomatis");
 }

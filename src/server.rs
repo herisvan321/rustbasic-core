@@ -4,7 +4,7 @@ use crate::session_manager::RustBasicSessionStore;
 use crate::router::{Router, Response};
 use crate::requests::Request;
 use std::net::SocketAddr;
-use sqlx::AnyPool;
+use crate::sql::AnyPool;
 use std::sync::Arc;
 use std::process::Command;
 use std::convert::Infallible;
@@ -20,9 +20,9 @@ pub struct AppState {
     pub config: Arc<Config>,
 }
 
-static EMBEDDED_PUBLIC_GET: std::sync::OnceLock<fn(&str) -> Option<rust_embed::EmbeddedFile>> = std::sync::OnceLock::new();
+static EMBEDDED_PUBLIC_GET: std::sync::OnceLock<fn(&str) -> Option<crate::rust_embed::EmbeddedFile>> = std::sync::OnceLock::new();
 
-pub fn set_embedded_public(f: fn(&str) -> Option<rust_embed::EmbeddedFile>) {
+pub fn set_embedded_public(f: fn(&str) -> Option<crate::rust_embed::EmbeddedFile>) {
     EMBEDDED_PUBLIC_GET.set(f).ok();
 }
 
@@ -95,6 +95,9 @@ pub async fn start_server(
             Ok(ok) => ok,
             Err(_) => continue,
         };
+        
+        // Optimasi latensi: Kirim paket TCP langsung tanpa buffering (disable Nagle's algorithm)
+        let _ = stream.set_nodelay(true);
         
         let io = TokioIo::new(stream);
         let state = state.clone();

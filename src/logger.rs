@@ -1,6 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::Write;
-use chrono::Local;
+use crate::chrono::Local;
 use crate::colored::Colorize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

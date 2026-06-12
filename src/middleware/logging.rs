@@ -24,7 +24,7 @@ pub async fn logging_middleware(
     println!(
         "[{}] {} {:<6} {} from {}",
         "HTTP".magenta().bold(),
-        chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string().dimmed(),
+        crate::chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string().dimmed(),
         method_colored.bold(),
         path.cyan(),
         ip.yellow()

@@ -4,9 +4,8 @@ pub struct Uuid(String);
 impl Uuid {
     /// Generate a new version-4 UUID, setting version to 4 and variant to 1.
     pub fn new_v4() -> Self {
-        use rand::Rng;
         let mut bytes = [0u8; 16];
-        rand::rng().fill_bytes(&mut bytes);
+        crate::rand::fill_bytes(&mut bytes);
         bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
         bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 1
 

@@ -1,170 +1,148 @@
 /* ---------------------------------------------------------
  * 📑 LABEL: VIEW ENGINE (config/view.rs)
- * Mengatur template engine (Minijinja) dan fungsi render.
+ * Mengatur template engine (RustBasic Template) dan fungsi render.
  * --------------------------------------------------------- */
 
 use crate::router::{Html, IntoResponse, Response};
 use http::StatusCode;
-use minijinja::Environment;
-use chrono::DateTime;
-use chrono_tz::Tz;
-use std::sync::LazyLock;
+use crate::chrono::{DateTime, FixedOffset};
+use crate::chrono_tz::{self, Tz};
 use crate::requests::Request as AppRequest;
 use crate::Config;
 use serde_json::{json, Value};
+use crate::template::TemplateEngine;
 
 use crate::tracing;
 
-// 1. Load Static Assets into Memory
-static HTMX_SRC: LazyLock<String> = LazyLock::new(|| {
-    include_str!("../resources/js/htmx.min.js").to_string()
-});
+static EMBEDDED_TEMPLATES_GET: std::sync::OnceLock<fn(&str) -> Option<crate::rust_embed::EmbeddedFile>> = std::sync::OnceLock::new();
 
-static CSS_SRC: LazyLock<String> = LazyLock::new(|| {
-    include_str!("../resources/css/style.css").to_string()
-});
-
-
-static EMBEDDED_TEMPLATES_GET: std::sync::OnceLock<fn(&str) -> Option<rust_embed::EmbeddedFile>> = std::sync::OnceLock::new();
-
-pub fn set_embedded_templates(f: fn(&str) -> Option<rust_embed::EmbeddedFile>) {
+pub fn set_embedded_templates(f: fn(&str) -> Option<crate::rust_embed::EmbeddedFile>) {
     EMBEDDED_TEMPLATES_GET.set(f).ok();
 }
 
-// 2. Setup Engine Template (Minijinja)
-pub static JINJA: LazyLock<Environment<'static>> = LazyLock::new(|| {
-    let mut env = Environment::new();
+fn load_template_content(name: &str) -> Result<String, String> {
+    let cfg = Config::load();
+    if cfg.app_debug {
+        let path = format!("src/resources/views/{}", name);
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            return Ok(content);
+        }
+    }
     
-    // Default Loader: Mencari di disk (jika debug), lalu fallback ke memori
-    env.set_loader(|name| {
-        let cfg = Config::load();
-        if cfg.app_debug {
-            let path = format!("src/resources/views/{}", name);
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                return Ok(Some(content));
-            }
+    // Fallback ke embedded templates di memori
+    let file = EMBEDDED_TEMPLATES_GET.get().and_then(|f| f(name));
+    if let Some(file) = file {
+        if let Ok(content) = std::str::from_utf8(&file.data) {
+            return Ok(content.to_string());
         }
-        
-        // Fallback ke embedded templates di memori
-        let file = EMBEDDED_TEMPLATES_GET.get().and_then(|f| f(name));
-        if let Some(file) = file {
-            if let Ok(content) = std::str::from_utf8(&file.data) {
-                return Ok(Some(content.to_string()));
-            }
-        }
-        
-        Ok(None)
-    });
-
-    // --- REGISTER CARBON-LIKE FILTERS ---
-
-    // Filter: {{ date | diff_for_humans }}
-    env.add_filter("diff_for_humans", |value: String| -> String {
-        if let Ok(dt) = DateTime::parse_from_rfc3339(&value) {
-            let now = chrono::Utc::now();
-            let dt_utc = dt.with_timezone(&chrono::Utc);
-            let duration = now.signed_duration_since(dt_utc);
-            let seconds = duration.num_seconds();
-            if seconds < 0 {
-                let seconds = -seconds;
-                if seconds < 60 {
-                    return "in a few seconds".to_string();
-                }
-                let minutes = seconds / 60;
-                if minutes < 60 {
-                    return format!("in {} minute{}", minutes, if minutes > 1 { "s" } else { "" });
-                }
-                let hours = minutes / 60;
-                if hours < 24 {
-                    return format!("in {} hour{}", hours, if hours > 1 { "s" } else { "" });
-                }
-                let days = hours / 24;
-                if days < 30 {
-                    return format!("in {} day{}", days, if days > 1 { "s" } else { "" });
-                }
-                let months = days / 30;
-                if months < 12 {
-                    return format!("in {} month{}", months, if months > 1 { "s" } else { "" });
-                }
-                let years = months / 12;
-                return format!("in {} year{}", years, if years > 1 { "s" } else { "" });
-            } else {
-                if seconds < 60 {
-                    return "a few seconds ago".to_string();
-                }
-                let minutes = seconds / 60;
-                if minutes < 60 {
-                    return format!("{} minute{} ago", minutes, if minutes > 1 { "s" } else { "" });
-                }
-                let hours = minutes / 60;
-                if hours < 24 {
-                    return format!("{} hour{} ago", hours, if hours > 1 { "s" } else { "" });
-                }
-                let days = hours / 24;
-                if days < 30 {
-                    return format!("{} day{} ago", days, if days > 1 { "s" } else { "" });
-                }
-                let months = days / 30;
-                if months < 12 {
-                    return format!("{} month{} ago", months, if months > 1 { "s" } else { "" });
-                }
-                let years = months / 12;
-                return format!("{} year{} ago", years, if years > 1 { "s" } else { "" });
-            }
-        }
-        value
-    });
-
-    // Filter: {{ date | format_date("%d %b %Y") }}
-    env.add_filter("format_date", |value: String, fmt: String| -> String {
-        let cfg = Config::load();
-        let tz_str = cfg.app_timezone.trim();
-        let tz: Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
-        
-        if let Ok(dt) = DateTime::parse_from_rfc3339(&value) {
-             return dt.with_timezone(&tz).format(&fmt).to_string();
-        }
-        value
-    });
-
-    // Global Function: {{ now() }}
-    env.add_function("now", || -> String {
-        let cfg = Config::load();
-        let tz_str = cfg.app_timezone.trim();
-        let tz: Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
-        
-        chrono::Utc::now().with_timezone(&tz).to_rfc3339()
-    });
-
-    // Global Function: {{ htmx_js() }}
-    env.add_function("htmx_js", || -> String {
-        HTMX_SRC.clone()
-    });
-
-    // Global Function: {{ app_css() }}
-    env.add_function("app_css", || -> String {
-        CSS_SRC.clone()
-    });
-
-    env
-});
-
+    }
+    
+    Err(format!("Template '{}' tidak ditemukan", name))
+}
 
 // 3. Fungsi Helper untuk Render HTML Statis
-pub fn render(template: &str, context: minijinja::Value) -> Response {
+pub fn render(template: &str, context: Value) -> Response {
     render_internal(template, context)
 }
 
-pub fn render_to_string(template: &str, context: minijinja::Value) -> String {
-    match JINJA.get_template(template) {
-        Ok(tmpl) => tmpl.render(context).unwrap_or_else(|e| format!("Render error: {}", e)),
-        Err(e) => format!("Template error: {}", e),
-    }
+pub fn render_to_string(template: &str, context: Value) -> String {
+    let content = match load_template_content(template) {
+        Ok(c) => c,
+        Err(e) => return format!("Template error: {}", e),
+    };
+    
+    let mut engine = TemplateEngine::new();
+    
+    // Register custom filters
+    engine.add_filter("diff_for_humans", |val: &Value, _args: &[Value]| {
+        if let Some(value) = val.as_str() {
+            if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+                let now = crate::chrono::Utc::now();
+                let dt_utc = dt.with_timezone(&crate::chrono::Utc);
+                let duration = now.signed_duration_since(dt_utc);
+                let seconds = duration.num_seconds();
+                let result = if seconds < 0 {
+                    let seconds = -seconds;
+                    if seconds < 60 {
+                        "in a few seconds".to_string()
+                    } else {
+                        let minutes = seconds / 60;
+                        if minutes < 60 {
+                            format!("in {} minute{}", minutes, if minutes > 1 { "s" } else { "" })
+                        } else {
+                            let hours = minutes / 60;
+                            if hours < 24 {
+                                format!("in {} hour{}", hours, if hours > 1 { "s" } else { "" })
+                            } else {
+                                let days = hours / 24;
+                                if days < 30 {
+                                    format!("in {} day{}", days, if days > 1 { "s" } else { "" })
+                                } else {
+                                    let months = days / 30;
+                                    if months < 12 {
+                                        format!("in {} month{}", months, if months > 1 { "s" } else { "" })
+                                    } else {
+                                        let years = months / 12;
+                                        format!("in {} year{}", years, if years > 1 { "s" } else { "" })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if seconds < 60 {
+                        "a few seconds ago".to_string()
+                    } else {
+                        let minutes = seconds / 60;
+                        if minutes < 60 {
+                            format!("{} minute{} ago", minutes, if minutes > 1 { "s" } else { "" })
+                        } else {
+                            let hours = minutes / 60;
+                            if hours < 24 {
+                                format!("{} hour{} ago", hours, if hours > 1 { "s" } else { "" })
+                            } else {
+                                let days = hours / 24;
+                                if days < 30 {
+                                    format!("{} day{} ago", days, if days > 1 { "s" } else { "" })
+                                } else {
+                                    let months = days / 30;
+                                    if months < 12 {
+                                        format!("{} month{} ago", months, if months > 1 { "s" } else { "" })
+                                    } else {
+                                        let years = months / 12;
+                                        format!("{} year{} ago", years, if years > 1 { "s" } else { "" })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                return Value::String(result);
+            }
+        }
+        val.clone()
+    });
+
+    engine.add_filter("format_date", |val: &Value, args: &[Value]| {
+        let fmt = args.first().and_then(|a| a.as_str()).unwrap_or("%Y-%m-%d");
+        if let Some(value) = val.as_str() {
+            let cfg = Config::load();
+            let tz_str = cfg.app_timezone.trim();
+            let tz: Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
+            
+            if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+                return Value::String(dt.with_timezone(&tz).format(fmt).to_string());
+            }
+        }
+        val.clone()
+    });
+
+    engine.render(&content, &context).unwrap_or_else(|e| format!("Render error: {}", e))
 }
 
 // 4. Fungsi Helper untuk Render dengan Session
-pub fn view(req: &AppRequest, template: &str, ctx: minijinja::Value) -> Response {
-    let mut ctx_value = serde_json::to_value(&ctx).unwrap_or_else(|_| json!({}));
+pub fn view(req: &AppRequest, template: &str, ctx: Value) -> Response {
+    let mut ctx_value = ctx;
     
     if !ctx_value.is_object() {
         ctx_value = json!({});
@@ -201,35 +179,117 @@ pub fn view(req: &AppRequest, template: &str, ctx: minijinja::Value) -> Response
     let is_logged_in = req.session.get::<i64>("user_id").is_some();
     obj.insert("auth".to_string(), json!(is_logged_in));
 
-    render_internal(template, minijinja::Value::from_serialize(obj))
+    render_internal(template, ctx_value)
 }
 
-fn render_internal(template: &str, context: minijinja::Value) -> Response {
+fn render_internal(template: &str, context: Value) -> Response {
     let cfg = crate::Config::load();
     tracing::debug!("Rendering template: {} (APP_DEBUG: {})", template, cfg.app_debug);
 
-    match JINJA.get_template(template) {
-        Ok(tmpl) => match tmpl.render(context.clone()) {
-            Ok(rendered) => {
-                Html(rendered).into_response()
-            },
-            Err(err) => {
-                tracing::error!("Gagal render template: {}", err);
-                
-                if cfg.app_debug {
-                    return (StatusCode::INTERNAL_SERVER_ERROR, format!("Render Error: {}", err)).into_response();
+    match load_template_content(template) {
+        Ok(content) => {
+            let mut engine = TemplateEngine::new();
+            
+            // Register custom filters
+            engine.add_filter("diff_for_humans", |val: &Value, _args: &[Value]| {
+                if let Some(value) = val.as_str() {
+                    if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+                        let now = crate::chrono::Utc::now();
+                        let dt_utc = dt.with_timezone(&crate::chrono::Utc);
+                        let duration = now.signed_duration_since(dt_utc);
+                        let seconds = duration.num_seconds();
+                        let result = if seconds < 0 {
+                            let seconds = -seconds;
+                            if seconds < 60 {
+                                "in a few seconds".to_string()
+                            } else {
+                                let minutes = seconds / 60;
+                                if minutes < 60 {
+                                    format!("in {} minute{}", minutes, if minutes > 1 { "s" } else { "" })
+                                } else {
+                                    let hours = minutes / 60;
+                                    if hours < 24 {
+                                        format!("in {} hour{}", hours, if hours > 1 { "s" } else { "" })
+                                    } else {
+                                        let days = hours / 24;
+                                        if days < 30 {
+                                            format!("in {} day{}", days, if days > 1 { "s" } else { "" })
+                                        } else {
+                                            let months = days / 30;
+                                            if months < 12 {
+                                                format!("in {} month{}", months, if months > 1 { "s" } else { "" })
+                                            } else {
+                                                let years = months / 12;
+                                                format!("in {} year{}", years, if years > 1 { "s" } else { "" })
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            if seconds < 60 {
+                                "a few seconds ago".to_string()
+                            } else {
+                                let minutes = seconds / 60;
+                                if minutes < 60 {
+                                    format!("{} minute{} ago", minutes, if minutes > 1 { "s" } else { "" })
+                                } else {
+                                    let hours = minutes / 60;
+                                    if hours < 24 {
+                                        format!("{} hour{} ago", hours, if hours > 1 { "s" } else { "" })
+                                    } else {
+                                        let days = hours / 24;
+                                        if days < 30 {
+                                            format!("{} day{} ago", days, if days > 1 { "s" } else { "" })
+                                        } else {
+                                            let months = days / 30;
+                                            if months < 12 {
+                                                format!("{} month{} ago", months, if months > 1 { "s" } else { "" })
+                                            } else {
+                                                let years = months / 12;
+                                                format!("{} year{} ago", years, if years > 1 { "s" } else { "" })
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        return Value::String(result);
+                    }
                 }
+                val.clone()
+            });
 
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
+            engine.add_filter("format_date", |val: &Value, args: &[Value]| {
+                let fmt = args.first().and_then(|a| a.as_str()).unwrap_or("%Y-%m-%d");
+                if let Some(value) = val.as_str() {
+                    let cfg = Config::load();
+                    let tz_str = cfg.app_timezone.trim();
+                    let tz: Tz = tz_str.parse().unwrap_or(chrono_tz::UTC);
+                    
+                    if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+                        return Value::String(dt.with_timezone(&tz).format(fmt).to_string());
+                    }
+                }
+                val.clone()
+            });
+
+            match engine.render(&content, &context) {
+                Ok(rendered) => Html(rendered).into_response(),
+                Err(err) => {
+                    tracing::error!("Gagal render template: {}", err);
+                    if cfg.app_debug {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, format!("Render Error: {}", err)).into_response();
+                    }
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
+                }
             }
-        },
+        }
         Err(err) => {
             tracing::error!("Template tidak ditemukan: {}", err);
-
             if cfg.app_debug {
                 return (StatusCode::NOT_FOUND, format!("Template Not Found: {}", err)).into_response();
             }
-
             (StatusCode::NOT_FOUND, "Not Found").into_response()
         }
     }

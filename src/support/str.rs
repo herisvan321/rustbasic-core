@@ -1,5 +1,5 @@
 use crate::uuid::Uuid;
-use rand::distr::{Alphanumeric, SampleString};
+use crate::rand::distr::{Alphanumeric, SampleString};
 
 pub struct Stringable(String);
 
@@ -89,7 +89,7 @@ impl Str {
 
     /// Menghasilkan string acak alfabet/angka dengan panjang tertentu (Str::random())
     pub fn random(length: usize) -> String {
-        Alphanumeric.sample_string(&mut rand::rng(), length)
+        Alphanumeric.sample_string(&mut crate::rand::rng(), length)
     }
 
     /// Mengonversi string menjadi slug ramah URL (Str::slug())

@@ -22,12 +22,21 @@ pub mod colored;
 pub mod base64;
 pub mod serde_urlencoded;
 pub mod testing;
+#[cfg(feature = "mail")]
 pub mod mail;
+pub mod template;
+pub mod sql;
+pub mod rand;
+pub mod bcrypt;
+
 
 pub use testing::{TestClient, TestResponse};
 pub use schema::{Schema, Blueprint, ColumnBuilder, SchemaManager, MigrationTrait, MigratorTrait, DbErr};
-pub use support::{Log, Str, Validator, Http, PendingRequest, HttpResponse};
+pub use support::{Log, Str, Validator};
+#[cfg(feature = "http-client")]
+pub use support::{Http, PendingRequest, HttpResponse};
 pub use database::{DB, QueryBuilder};
+#[cfg(feature = "mail")]
 pub use mail::{MailService, Mailer};
 
 // Re-export Config agar bisa dipanggil dengan crate::Config
@@ -39,17 +48,22 @@ pub use router::{Router, Response, IntoResponse, State, Html, Json, Redirect, ge
 pub use middleware::{from_fn, Next};
 pub use rustbasic_core_macro::async_trait;
 
-// --- RE-EXPORTS ---
 pub use http;
-pub use sqlx;
 pub use tokio;
-pub use minijinja;
+pub use template as rustbasic_template;
 pub use serde;
 pub use serde_json;
-pub use chrono;
-pub use chrono_tz;
-pub use bcrypt;
-
-pub use rand;
-pub use rust_embed;
+pub use regex;
+pub mod chrono;
+pub mod chrono_tz;
+pub mod rust_embed;
+#[cfg(feature = "http-client")]
 pub use reqwest;
+#[cfg(feature = "jwt")]
+pub use jsonwebtoken;
+#[cfg(feature = "image-processing")]
+pub use image;
+#[cfg(feature = "image-processing")]
+pub use webp;
+#[cfg(feature = "image-processing")]
+pub use sha2;

@@ -33,6 +33,8 @@ pub mod bcrypt;
 pub use testing::{TestClient, TestResponse};
 pub use schema::{Schema, Blueprint, ColumnBuilder, SchemaManager, MigrationTrait, MigratorTrait, DbErr};
 pub use support::{Log, Str, Validator};
+#[cfg(feature = "websocket")]
+pub use support::Broadcaster;
 #[cfg(feature = "http-client")]
 pub use support::{Http, PendingRequest, HttpResponse};
 pub use database::{DB, QueryBuilder};
@@ -67,3 +69,11 @@ pub use image;
 pub use webp;
 #[cfg(feature = "image-processing")]
 pub use sha2;
+
+#[cfg(feature = "android")]
+pub use jni;
+#[cfg(feature = "android")]
+pub use libc;
+
+#[cfg(feature = "desktop")]
+pub use wry;

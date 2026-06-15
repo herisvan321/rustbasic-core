@@ -41,7 +41,9 @@ impl Session {
 }
 
 pub async fn setup_session(cfg: &Config) -> RustBasicSessionStore {
-    let session_db_url = if cfg.session_driver == "file" {
+    let session_db_url = if let Ok(url) = std::env::var("DATABASE_URL") {
+        url
+    } else if cfg.session_driver == "file" {
         "sqlite:database/sessions.sqlite?mode=rwc".to_string()
     } else if cfg.db_connection == "mysql" {
         format!(
@@ -80,7 +82,9 @@ pub async fn setup_session(cfg: &Config) -> RustBasicSessionStore {
 }
 
 pub async fn init_sessions(cfg: &Config) {
-    let db_url = if cfg.session_driver == "file" {
+    let db_url = if let Ok(url) = std::env::var("DATABASE_URL") {
+        url
+    } else if cfg.session_driver == "file" {
         "sqlite:database/sessions.sqlite?mode=rwc".to_string()
     } else if cfg.db_connection == "mysql" {
         format!(

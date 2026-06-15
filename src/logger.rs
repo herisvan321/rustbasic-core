@@ -35,7 +35,7 @@ pub fn init() -> LoggerGuard {
 
 /// Core logging function that handles console output with colors and appends to a daily rolling log file.
 pub fn log(level: Level, msg: &str) {
-    let timestamp = Local::now().format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string();
+    let timestamp = Local::now().format("%Y-%m-%d %H:%M").to_string();
 
     let level_str = format!("[{}]", level);
     let level_colored = match level {
@@ -46,7 +46,7 @@ pub fn log(level: Level, msg: &str) {
         Level::Trace => level_str.magenta().bold(),
     };
 
-    let console_line = format!("{} {} {}", level_colored, timestamp.to_string().dimmed(), msg);
+    let console_line = format!("{} [{}] {}", level_colored, timestamp.to_string().dimmed(), msg);
     println!("{}", console_line);
 
     // Ensure logs directory exists
@@ -68,15 +68,15 @@ pub fn log(level: Level, msg: &str) {
 }
 
 fn print_banner() {
-    println!();
-    println!("    \x1b[38;5;208m██████╗ ██╗   ██╗███████╗████████╗\x1b[38;5;245m██████╗  █████╗ ███████╗██╗ ██████╗\x1b[0m");
-    println!("    \x1b[38;5;208m██╔══██╗██║   ██║██╔════╝╚══██╔══╝\x1b[38;5;245m██╔══██╗██╔══██╗██╔════╝██║██╔════╝\x1b[0m");
-    println!("    \x1b[38;5;208m██████╔╝██║   ██║███████╗   ██║   \x1b[38;5;245m██████╔╝███████║███████╗██║██║     \x1b[0m");
-    println!("    \x1b[38;5;208m██╔══██╗██║   ██║╚════██║   ██║   \x1b[38;5;245m██╔══██╗██╔══██║╚════██║██║██║     \x1b[0m");
-    println!("    \x1b[38;5;208m██║  ██║╚██████╔╝███████║   ██║   \x1b[38;5;245m██████╔╝██║  ██║███████║██║╚██████╗\x1b[0m");
-    println!("    \x1b[38;5;208m╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   \x1b[38;5;245m╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝\x1b[0m");
-    println!();
-    println!("    >> \x1b[1;38;5;208mRust\x1b[0m\x1b[1;38;5;245mBasic\x1b[0m Full-stack Framework - Version 2026 <<");
+    // println!();
+    // println!("    \x1b[38;5;208m██████╗ ██╗   ██╗███████╗████████╗\x1b[38;5;245m██████╗  █████╗ ███████╗██╗ ██████╗\x1b[0m");
+    // println!("    \x1b[38;5;208m██╔══██╗██║   ██║██╔════╝╚══██╔══╝\x1b[38;5;245m██╔══██╗██╔══██╗██╔════╝██║██╔════╝\x1b[0m");
+    // println!("    \x1b[38;5;208m██████╔╝██║   ██║███████╗   ██║   \x1b[38;5;245m██████╔╝███████║███████╗██║██║     \x1b[0m");
+    // println!("    \x1b[38;5;208m██╔══██╗██║   ██║╚════██║   ██║   \x1b[38;5;245m██╔══██╗██╔══██║╚════██║██║██║     \x1b[0m");
+    // println!("    \x1b[38;5;208m██║  ██║╚██████╔╝███████║   ██║   \x1b[38;5;245m██████╔╝██║  ██║███████║██║╚██████╗\x1b[0m");
+    // println!("    \x1b[38;5;208m╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   \x1b[38;5;245m╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝ ╚═════╝\x1b[0m");
+    // println!();
+    // println!("    >> \x1b[1;38;5;208mRust\x1b[0m\x1b[1;38;5;245mBasic\x1b[0m Full-stack Framework - Version 2026 <<");
     println!();
 }
 

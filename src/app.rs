@@ -16,6 +16,7 @@ pub struct Config {
     pub app_timezone: String,
     pub app_limit_request: u64,
     pub vite_port: u16,
+    pub websocket_enabled: bool,
     
     // 🗄️ Database
     pub db_connection: String,
@@ -57,7 +58,16 @@ impl Config {
                 key
             },
             app_debug: env::var("APP_DEBUG").unwrap_or_else(|_| "false".to_string()).parse().unwrap_or(false),
-            app_url: env::var("APP_URL").unwrap_or_else(|_| "http://localhost:4000".to_string()),
+            app_url: {
+                let mut url = env::var("APP_URL").unwrap_or_else(|_| "http://localhost:4000".to_string());
+                let port = env::var("APP_PORT").unwrap_or_else(|_| "4000".to_string());
+                if url.starts_with("http://localhost:") || url == "http://localhost" {
+                    url = format!("http://localhost:{}", port);
+                } else if url.starts_with("http://127.0.0.1:") || url == "http://127.0.0.1" {
+                    url = format!("http://127.0.0.1:{}", port);
+                }
+                url
+            },
             app_timezone: env::var("APP_TIMEZONE").unwrap_or_else(|_| "UTC".to_string()),
             app_limit_request: env::var("APP_LIMIT_REQUEST")
                 .unwrap_or_else(|_| "20".to_string())
@@ -67,6 +77,10 @@ impl Config {
                 .unwrap_or_else(|_| "5173".to_string())
                 .parse()
                 .expect("VITE_PORT harus berupa angka"),
+            websocket_enabled: env::var("WEBSOCKET_ENABLED")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
             
             // Database
             db_connection: env::var("DB_CONNECTION").unwrap_or_else(|_| "sqlite".to_string()),

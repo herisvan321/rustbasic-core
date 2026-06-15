@@ -6,13 +6,16 @@ use crate::requests::Request;
 use std::net::SocketAddr;
 use crate::sql::AnyPool;
 use std::sync::Arc;
-use std::process::Command;
 use std::convert::Infallible;
 use tokio::net::TcpListener;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use hyper::server::conn::http1;
 use crate::rand::distr::SampleString;
+#[cfg(feature = "websocket")]
+use futures_util::{SinkExt, StreamExt};
+#[cfg(feature = "websocket")]
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -86,6 +89,7 @@ pub async fn start_server(
     let addr: SocketAddr = addr_str.parse().expect("Alamat server tidak valid");
     
     tracing::info!("{} berjalan di: http://{}", cfg.app_name, addr);
+    tracing::info!("WebSockets enabled: {}", cfg.websocket_enabled);
     
     // 4. Jalankan Server
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -119,6 +123,7 @@ pub async fn start_server(
 
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service)
+                .with_upgrades()
                 .await
             {
                 tracing::debug!("Error serving connection: {:?}", err);
@@ -196,13 +201,49 @@ async fn serve_static_or_404(path: &str, state: &AppState) -> Response {
 }
 
 async fn handle_http_request(
-    hyper_req: hyper::Request<hyper::body::Incoming>,
+    #[allow(unused_mut)] mut hyper_req: hyper::Request<hyper::body::Incoming>,
     peer_ip: String,
     state: AppState,
     router: Router<AppState>,
     session_store: RustBasicSessionStore,
 ) -> hyper::Response<http_body_util::Full<hyper::body::Bytes>> {
     use http_body_util::BodyExt;
+    
+    // Check for WebSocket upgrade at "/ws" route
+    let path_str = hyper_req.uri().path().to_string();
+    if path_str == "/ws" {
+        #[cfg(feature = "websocket")]
+        {
+            if !state.config.websocket_enabled {
+                return hyper::Response::builder()
+                    .status(http::StatusCode::NOT_FOUND)
+                    .body(http_body_util::Full::new(hyper::body::Bytes::from("WebSockets are disabled")))
+                    .unwrap();
+            }
+
+            if hyper_tungstenite::is_upgrade_request(&hyper_req) {
+                match hyper_tungstenite::upgrade(&mut hyper_req, None) {
+                    Ok((response, websocket)) => {
+                        tokio::spawn(async move {
+                            handle_websocket_connection(websocket).await;
+                        });
+                        let (parts, _) = response.into_parts();
+                        return hyper::Response::from_parts(parts, http_body_util::Full::new(hyper::body::Bytes::new()));
+                    }
+                    Err(e) => {
+                        tracing::error!("Gagal mengupgrade koneksi WebSocket: {:?}", e);
+                    }
+                }
+            }
+        }
+        #[cfg(not(feature = "websocket"))]
+        {
+            return hyper::Response::builder()
+                .status(http::StatusCode::NOT_FOUND)
+                .body(http_body_util::Full::new(hyper::body::Bytes::from("WebSockets feature not compiled")))
+                .unwrap();
+        }
+    }
     
     let (parts, body) = hyper_req.into_parts();
     let method = parts.method.clone();
@@ -359,7 +400,11 @@ async fn handle_http_request(
     hyper::Response::from_parts(res_parts, http_body_util::Full::new(hyper::body::Bytes::from(res_body)))
 }
 
-fn kill_port_if_in_use(port: u16) {
+fn kill_port_if_in_use(_port: u16) {
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    use std::process::Command;
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    let port = _port;
     #[cfg(target_os = "macos")]
     {
         let output = Command::new("lsof")
@@ -419,5 +464,93 @@ fn kill_port_if_in_use(port: u16) {
                 std::thread::sleep(std::time::Duration::from_millis(500));
             }
         }
+    }
+}
+
+#[cfg(feature = "websocket")]
+async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocket) {
+    let mut ws = match ws_stream.await {
+        Ok(w) => w,
+        Err(e) => {
+            crate::tracing::error!("WebSocket handshake failed: {:?}", e);
+            return;
+        }
+    };
+
+    let state = crate::support::broadcaster::Broadcaster::state();
+    let conn_id = state.next_conn_id();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let mut subscribed_channels = Vec::new();
+
+    loop {
+        tokio::select! {
+            incoming = ws.next() => {
+                let msg = match incoming {
+                    Some(Ok(m)) => m,
+                    Some(Err(_)) | None => break,
+                };
+
+                if msg.is_text() {
+                    let text = msg.to_text().unwrap_or("");
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+                        if let Some(action) = val.get("action").and_then(|a| a.as_str()) {
+                            if let Some(channel) = val.get("channel").and_then(|c| c.as_str()) {
+                                match action {
+                                    "subscribe" => {
+                                        let session = crate::support::broadcaster::ClientSession {
+                                            id: conn_id,
+                                            tx: tx.clone(),
+                                        };
+                                        state.subscribe(channel, session).await;
+                                        subscribed_channels.push(channel.to_string());
+                                    }
+                                    "unsubscribe" => {
+                                        state.unsubscribe(channel, conn_id).await;
+                                        subscribed_channels.retain(|c| c != channel);
+                                    }
+                                    "broadcast" => {
+                                        if let Some(event) = val.get("event").and_then(|e| e.as_str()) {
+                                            if let Some(data) = val.get("data") {
+                                                let msg = serde_json::json!({
+                                                    "event": event,
+                                                    "channel": channel,
+                                                    "data": data
+                                                });
+                                                if let Ok(msg_str) = serde_json::to_string(&msg) {
+                                                    let channels = state.channels.read().await;
+                                                    if let Some(sessions) = channels.get(channel) {
+                                                        for session in sessions {
+                                                            if session.id != conn_id {
+                                                                let _ = session.tx.send(msg_str.clone());
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                } else if msg.is_close() {
+                    break;
+                }
+            }
+            outgoing = rx.recv() => {
+                let text = match outgoing {
+                    Some(t) => t,
+                    None => break,
+                };
+                if ws.send(Message::Text(text.into())).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+
+    for channel in subscribed_channels {
+        state.unsubscribe(&channel, conn_id).await;
     }
 }

@@ -26,7 +26,7 @@ pub async fn security_headers_middleware(
     // 5. Permissions Policy (Membatasi akses API sensor hardware sensitif)
     headers.insert(
         http::header::HeaderName::from_static("permissions-policy"),
-        "camera=(), microphone=(), geolocation=(), payment=()".parse().unwrap()
+        "camera=(self), microphone=(self), geolocation=(self), payment=()".parse().unwrap()
     );
     
     let cfg = crate::Config::load();

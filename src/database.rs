@@ -6,7 +6,9 @@ use serde_json::Value;
 use serde::de::DeserializeOwned;
 
 pub async fn connect(cfg: &Config) -> AnyPool {
-    let db_url = if cfg.db_connection == "mysql" {
+    let db_url = if let Ok(url) = std::env::var("DATABASE_URL") {
+        url
+    } else if cfg.db_connection == "mysql" {
         format!(
             "mysql://{}:{}@{}:{}/{}",
             cfg.db_username, cfg.db_password, cfg.db_host, cfg.db_port, cfg.db_database

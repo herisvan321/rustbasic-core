@@ -12,8 +12,8 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.1.26"
-build = false
+version = "0.1.27"
+build = "build.rs"
 autolib = false
 autobins = false
 autoexamples = false
@@ -68,6 +68,7 @@ version = "1.0.140"
 
 [dependencies.regex]
 version = "1.10"
+optional = true
 
 
 [dependencies.tokio]
@@ -118,11 +119,19 @@ optional = true
 version = "0.2"
 optional = true
 
+[dependencies]
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "sqlite", "mysql", "chrono", "macros"], optional = true }
+libsqlite3-sys = { version = "0.30", optional = true }
+
+[target.'cfg(any(target_env = "musl", target_os = "linux"))'.dependencies]
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+
 [features]
 default = ["sqlite"]
-sqlite = []
-sqlite-bundled = ["sqlite"]
-mysql = []
+regex = ["dep:regex"]
+sqlite = ["dep:sqlx", "sqlx/sqlite"]
+sqlite-bundled = ["sqlite", "libsqlite3-sys/bundled"]
+mysql = ["dep:sqlx", "sqlx/mysql"]
 mail = ["dep:lettre"]
 http-client = ["dep:reqwest"]
 jwt = ["dep:jsonwebtoken"]

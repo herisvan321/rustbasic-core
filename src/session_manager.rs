@@ -9,9 +9,9 @@ fn replace_postgres_placeholders(sql: &str) -> String {
     while let Some(ch) = chars.next() {
         if ch == '$' {
             // Konsumsi digit setelah '$' (jika ada)
-            let has_digit = chars.peek().map_or(false, |c| c.is_ascii_digit());
+            let has_digit = chars.peek().is_some_and(|c| c.is_ascii_digit());
             if has_digit {
-                while chars.peek().map_or(false, |c| c.is_ascii_digit()) {
+                while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                     chars.next();
                 }
                 result.push('?');
@@ -67,11 +67,10 @@ impl RustBasicSessionStore {
             if let Ok(s) = row.try_get::<String, _>(0) {
                 return Some(s);
             }
-            if let Ok(bytes) = row.try_get::<Vec<u8>, _>(0) {
-                if let Ok(s) = String::from_utf8(bytes) {
+            if let Ok(bytes) = row.try_get::<Vec<u8>, _>(0)
+                && let Ok(s) = String::from_utf8(bytes) {
                     return Some(s);
                 }
-            }
         }
         None
     }

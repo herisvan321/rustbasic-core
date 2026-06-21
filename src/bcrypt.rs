@@ -181,7 +181,7 @@ fn char_to_index(c: u8) -> Option<u8> {
 }
 
 pub fn base64_encode(src: &[u8]) -> String {
-    let mut out = String::with_capacity((src.len() * 8 + 5) / 6);
+    let mut out = String::with_capacity((src.len() * 8).div_ceil(6));
     let mut i = 0;
     while i < src.len() {
         let b0 = src[i] as u32;
@@ -191,7 +191,7 @@ pub fn base64_encode(src: &[u8]) -> String {
         let chunk = (b0 << 16) | (b1 << 8) | b2;
         
         out.push(BCRYPT_ALPHABET[((chunk >> 18) & 0x3F) as usize] as char);
-        if i + 1 <= src.len() {
+        if i < src.len() {
             out.push(BCRYPT_ALPHABET[((chunk >> 12) & 0x3F) as usize] as char);
         }
         if i + 2 <= src.len() {

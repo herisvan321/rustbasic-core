@@ -289,9 +289,7 @@ impl Blueprint {
                 mapped = "VARCHAR(8)".to_string();
             }
         } else {
-            if mapped == "DATETIME" || mapped == "TIMESTAMP" || mapped == "DATE" || mapped == "TIME" {
-                mapped = "TEXT".to_string();
-            } else if mapped.contains("TEXT") {
+            if mapped == "DATETIME" || mapped == "TIMESTAMP" || mapped == "DATE" || mapped == "TIME" || mapped.contains("TEXT") {
                 mapped = "TEXT".to_string();
             } else if mapped.contains("UNSIGNED") {
                 mapped = "INTEGER".to_string();

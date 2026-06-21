@@ -111,7 +111,7 @@ impl TestClient {
                 for route in &self.router.routes {
                     if crate::server::match_path(&route.path, &path) {
                         for (m, h) in &route.handlers {
-                            if m == &method {
+                            if m == method {
                                 matched_handler = Some(h.clone());
                                 matched_params = crate::server::extract_params(&route.path, &path);
                                 break;

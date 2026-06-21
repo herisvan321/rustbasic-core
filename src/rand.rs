@@ -4,11 +4,10 @@ use std::io::Read;
 /// Fill the buffer with cryptographically secure random bytes from /dev/urandom.
 /// If unavailable (e.g. non-Unix sandbox), fall back to a system-time-seeded LCG generator.
 pub fn fill_bytes(buf: &mut [u8]) {
-    if let Ok(mut f) = File::open("/dev/urandom") {
-        if f.read_exact(buf).is_ok() {
+    if let Ok(mut f) = File::open("/dev/urandom")
+        && f.read_exact(buf).is_ok() {
             return;
         }
-    }
     
     // Fallback: LCG generator using system time as seed
     use std::time::SystemTime;

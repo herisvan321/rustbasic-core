@@ -29,6 +29,10 @@ pub fn set_embedded_public(f: fn(&str) -> Option<crate::rust_embed::EmbeddedFile
     EMBEDDED_PUBLIC_GET.set(f).ok();
 }
 
+pub fn get_embedded_public_fn() -> Option<fn(&str) -> Option<crate::rust_embed::EmbeddedFile>> {
+    EMBEDDED_PUBLIC_GET.get().copied()
+}
+
 fn guess_mime(path: &str) -> &'static str {
     if path.ends_with(".js") {
         "application/javascript"
@@ -163,9 +167,8 @@ pub(crate) fn extract_params(route_path: &str, req_path: &str) -> std::collectio
             // Sintaks {param}
             let key = &r[1..r.len() - 1];
             params.insert(key.to_string(), q.to_string());
-        } else if r.starts_with(':') {
+        } else if let Some(key) = r.strip_prefix(':') {
             // Sintaks :param
-            let key = &r[1..];
             params.insert(key.to_string(), q.to_string());
         }
     }
@@ -178,15 +181,14 @@ async fn serve_static_or_404(path: &str, state: &AppState) -> Response {
 
     if state.config.app_debug {
         let disk_path = std::path::Path::new("public").join(file_path);
-        if disk_path.exists() && disk_path.is_file() {
-            if let Ok(content) = std::fs::read(&disk_path) {
+        if disk_path.exists() && disk_path.is_file()
+            && let Ok(content) = std::fs::read(&disk_path) {
                 let mime = guess_mime(file_path);
                 return http::Response::builder()
                     .header(http::header::CONTENT_TYPE, mime)
                     .body(content)
                     .unwrap();
             }
-        }
     } else {
         if let Some(file) = EMBEDDED_PUBLIC_GET.get().and_then(|f| f(file_path)) {
             let mime = guess_mime(file_path);
@@ -258,31 +260,28 @@ async fn handle_http_request(
     }
     
     let mut inputs = serde_json::json!({});
-    if let Some(query) = uri.query() {
-        if let Ok(params) = crate::serde_urlencoded::from_str::<std::collections::HashMap<String, String>>(query) {
+    if let Some(query) = uri.query()
+        && let Ok(params) = crate::serde_urlencoded::from_str::<std::collections::HashMap<String, String>>(query) {
             for (k, v) in params {
                 inputs[k] = serde_json::json!(v);
             }
         }
-    }
     
     let body_bytes = body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
     let content_type = headers.get("content-type").map(|s| s.as_str()).unwrap_or("");
     if content_type.starts_with("application/json") {
-        if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-            if let serde_json::Value::Object(obj) = json_val {
+        if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&body_bytes)
+            && let serde_json::Value::Object(obj) = json_val {
                 for (k, v) in obj {
                     inputs[k] = v;
                 }
             }
-        }
-    } else if content_type.starts_with("application/x-www-form-urlencoded") {
-        if let Ok(params) = crate::serde_urlencoded::from_bytes::<std::collections::HashMap<String, String>>(&body_bytes) {
+    } else if content_type.starts_with("application/x-www-form-urlencoded")
+        && let Ok(params) = crate::serde_urlencoded::from_bytes::<std::collections::HashMap<String, String>>(&body_bytes) {
             for (k, v) in params {
                 inputs[k] = serde_json::json!(v);
             }
         }
-    }
     
     let mut session_id = None;
     if let Some(cookie_header) = headers.get("cookie") {
@@ -340,7 +339,7 @@ async fn handle_http_request(
             for route in &self.router.routes {
                 if match_path(&route.path, &path) {
                     for (m, h) in &route.handlers {
-                        if m == &method {
+                        if m == method {
                             matched_handler = Some(h.clone());
                             matched_params = extract_params(&route.path, &path);
                             break;
@@ -492,9 +491,9 @@ async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocke
 
                 if msg.is_text() {
                     let text = msg.to_text().unwrap_or("");
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
-                        if let Some(action) = val.get("action").and_then(|a| a.as_str()) {
-                            if let Some(channel) = val.get("channel").and_then(|c| c.as_str()) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(text)
+                        && let Some(action) = val.get("action").and_then(|a| a.as_str())
+                            && let Some(channel) = val.get("channel").and_then(|c| c.as_str()) {
                                 match action {
                                     "subscribe" => {
                                         let session = crate::support::broadcaster::ClientSession {
@@ -509,8 +508,8 @@ async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocke
                                         subscribed_channels.retain(|c| c != channel);
                                     }
                                     "broadcast" => {
-                                        if let Some(event) = val.get("event").and_then(|e| e.as_str()) {
-                                            if let Some(data) = val.get("data") {
+                                        if let Some(event) = val.get("event").and_then(|e| e.as_str())
+                                            && let Some(data) = val.get("data") {
                                                 let msg = serde_json::json!({
                                                     "event": event,
                                                     "channel": channel,
@@ -527,13 +526,10 @@ async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocke
                                                     }
                                                 }
                                             }
-                                        }
                                     }
                                     _ => {}
                                 }
                             }
-                        }
-                    }
                 } else if msg.is_close() {
                     break;
                 }
@@ -543,7 +539,7 @@ async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocke
                     Some(t) => t,
                     None => break,
                 };
-                if ws.send(Message::Text(text.into())).await.is_err() {
+                if ws.send(Message::Text(text)).await.is_err() {
                     break;
                 }
             }
@@ -553,4 +549,41 @@ async fn handle_websocket_connection(ws_stream: hyper_tungstenite::HyperWebsocke
     for channel in subscribed_channels {
         state.unsubscribe(&channel, conn_id).await;
     }
+}
+
+pub async fn bootstrap<
+    M: crate::schema::MigratorTrait + Send + Sync + 'static,
+    S: crate::seeder::SeederTrait + Send + Sync + 'static,
+>(
+    args: &[String],
+    app_router: Router<AppState>,
+    embedded_templates: fn(&str) -> Option<crate::rust_embed::EmbeddedFile>,
+    embedded_public: fn(&str) -> Option<crate::rust_embed::EmbeddedFile>,
+    seeder: Option<S>,
+) {
+    // 1. Muat Konfigurasi
+    let cfg = Config::load();
+
+    // 2. Cek Command CLI
+    if args.len() > 1 && crate::cli::handle::<M, S>(
+        args,
+        &cfg,
+        seeder,
+    ).await {
+        return;
+    }
+
+    // 3. Setup Database
+    let db = crate::database::connect(&cfg).await;
+
+    // 4. Inisialisasi Session Store
+    crate::session::init_sessions(&cfg).await;
+    let session_store = crate::session::setup_session(&cfg).await;
+
+    // 5. Inject embedded files
+    crate::view::set_embedded_templates(embedded_templates);
+    set_embedded_public(embedded_public);
+
+    // 6. Jalankan Server
+    start_server(cfg, session_store, db, app_router).await;
 }

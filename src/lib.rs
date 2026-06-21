@@ -28,7 +28,10 @@ pub mod template;
 pub mod sql;
 pub mod rand;
 pub mod bcrypt;
+pub mod cli;
+pub mod inertia;
 
+pub use inertia::inertia;
 
 pub use testing::{TestClient, TestResponse};
 pub use schema::{Schema, Blueprint, ColumnBuilder, SchemaManager, MigrationTrait, MigratorTrait, DbErr};
@@ -43,7 +46,7 @@ pub use mail::{MailService, Mailer};
 
 // Re-export Config agar bisa dipanggil dengan crate::Config
 pub use app::Config;
-pub use server::AppState;
+pub use server::{AppState, bootstrap};
 pub use requests::Request;
 pub use responses::ResponseHelper;
 pub use router::{Router, Response, IntoResponse, State, Html, Json, Redirect, get, post, put, patch, delete};
@@ -55,6 +58,7 @@ pub use tokio;
 pub use template as rustbasic_template;
 pub use serde;
 pub use serde_json;
+#[cfg(feature = "regex")]
 pub use regex;
 pub mod chrono;
 pub mod chrono_tz;
@@ -77,3 +81,5 @@ pub use libc;
 
 #[cfg(feature = "desktop")]
 pub use wry;
+
+pub mod build;

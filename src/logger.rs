@@ -58,7 +58,7 @@ pub fn log(level: Level, msg: &str) {
 
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
-        .write(true)
+        
         .append(true)
         .open(&log_file_path)
     {

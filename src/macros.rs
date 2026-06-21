@@ -353,3 +353,20 @@ macro_rules! seeder {
         }
     };
 }
+
+#[macro_export]
+macro_rules! bootstrap_config {
+    () => {
+        #[derive($crate::rust_embed::RustEmbed)]
+        #[folder = "src/dist/"]
+        pub struct EmbeddedPublic;
+
+        #[derive($crate::rust_embed::RustEmbed)]
+        #[folder = "src/resources/views/"]
+        pub struct EmbeddedTemplates;
+
+        // Storage configuration paths
+        pub const STORAGE_TARGET: &str = "public/storage";
+        pub const STORAGE_SOURCE: &str = "storage/app/public";
+    };
+}

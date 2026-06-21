@@ -38,8 +38,11 @@ pub fn dotenv() -> Result<PathBuf, std::io::Error> {
                 val
             };
 
-            unsafe {
-                env::set_var(key, clean_val);
+            // Hanya set jika variabel belum ada di environment sistem
+            if env::var(key).is_err() {
+                unsafe {
+                    env::set_var(key, clean_val);
+                }
             }
         }
     }

@@ -348,6 +348,12 @@ impl ErasedHandler for MiddlewareHandler {
     }
 }
 
+impl<S> Default for Router<S> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<S> Router<S> {
     pub fn new() -> Self {
         Self {

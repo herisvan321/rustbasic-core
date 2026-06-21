@@ -111,7 +111,7 @@ pub struct NaiveDate {
 
 impl NaiveDate {
     pub fn from_ymd_opt(y: i32, m: u32, d: u32) -> Option<Self> {
-        if m >= 1 && m <= 12 && d >= 1 && d <= days_in_month(y, m) {
+        if (1..=12).contains(&m) && d >= 1 && d <= days_in_month(y, m) {
             Some(Self { y, m, d })
         } else {
             None
@@ -366,6 +366,9 @@ pub trait TimeZone: Sized + Copy + Clone {
     fn offset_from_utc_date(&self, utc: &NaiveDate) -> Self::Offset;
     fn offset_from_utc_datetime(&self, utc: &NaiveDateTime) -> Self::Offset;
 
+    // NOTE: `from_utc_datetime` takes `&self` intentionally to match the chrono crate's
+    // trait interface. Clippy's `wrong_self_convention` warning is suppressed here.
+    #[allow(clippy::wrong_self_convention)]
     fn from_utc_datetime(&self, utc: &NaiveDateTime) -> DateTime<Self> {
         let offset = self.offset_from_utc_datetime(utc);
         let fixed = offset.fix();
@@ -645,7 +648,7 @@ impl DateTime<FixedOffset> {
             return Err("Datetime string too short".to_string());
         }
         let tz_idx = s[19..]
-            .find(|c| c == 'Z' || c == '+' || c == '-')
+            .find(['Z', '+', '-'])
             .map(|idx| idx + 19)
             .ok_or_else(|| "Timezone offset missing".to_string())?;
         let naive_str = &s[..tz_idx];
@@ -806,7 +809,7 @@ impl<'de> Deserialize<'de> for DateTime<FixedOffset> {
                     return Err(E::custom("Datetime string too short"));
                 }
                 let tz_idx = value[19..]
-                    .find(|c| c == 'Z' || c == '+' || c == '-')
+                    .find(['Z', '+', '-'])
                     .map(|idx| idx + 19)
                     .ok_or_else(|| E::custom("Timezone offset missing"))?;
                 let naive_str = &value[..tz_idx];

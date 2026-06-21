@@ -62,15 +62,30 @@ pub async fn security_headers_middleware(
             port, port, port, port, extra_hosts
         )
     } else {
-        "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; \
-         style-src 'self' 'unsafe-inline' https:; \
-         font-src 'self' https: data:; \
-         img-src 'self' data: https:; \
-         frame-src 'self' https:; \
-         media-src 'self' https:; \
-         object-src 'self' https:; \
-         connect-src 'self' https:;".to_string()
+        let app_url = &cfg.app_url;
+        let mut extra_connect = String::new();
+        if !app_url.is_empty() {
+            extra_connect.push_str(&format!("{} ", app_url));
+            if app_url.starts_with("https://") {
+                let ws_url = format!("wss://{}", app_url.trim_start_matches("https://"));
+                extra_connect.push_str(&format!("{} ", ws_url));
+            } else if app_url.starts_with("http://") {
+                let ws_url = format!("ws://{}", app_url.trim_start_matches("http://"));
+                extra_connect.push_str(&format!("{} ", ws_url));
+            }
+        }
+        format!(
+            "default-src 'self'; \
+             script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; \
+             style-src 'self' 'unsafe-inline' https:; \
+             font-src 'self' https: data:; \
+             img-src 'self' data: https:; \
+             frame-src 'self' https:; \
+             media-src 'self' https:; \
+             object-src 'self' https:; \
+             connect-src 'self' {}https:;",
+            extra_connect
+        )
     };
     headers.insert(header::CONTENT_SECURITY_POLICY, csp.parse().unwrap());
     

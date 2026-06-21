@@ -31,11 +31,10 @@ fn load_template_content(name: &str) -> Result<String, String> {
     
     // Fallback ke embedded templates di memori
     let file = EMBEDDED_TEMPLATES_GET.get().and_then(|f| f(name));
-    if let Some(file) = file {
-        if let Ok(content) = std::str::from_utf8(&file.data) {
+    if let Some(file) = file
+        && let Ok(content) = std::str::from_utf8(&file.data) {
             return Ok(content.to_string());
         }
-    }
     
     Err(format!("Template '{}' tidak ditemukan", name))
 }
@@ -55,8 +54,8 @@ pub fn render_to_string(template: &str, context: Value) -> String {
     
     // Register custom filters
     engine.add_filter("diff_for_humans", |val: &Value, _args: &[Value]| {
-        if let Some(value) = val.as_str() {
-            if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+        if let Some(value) = val.as_str()
+            && let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
                 let now = crate::chrono::Utc::now();
                 let dt_utc = dt.with_timezone(&crate::chrono::Utc);
                 let duration = now.signed_duration_since(dt_utc);
@@ -119,7 +118,6 @@ pub fn render_to_string(template: &str, context: Value) -> String {
                 };
                 return Value::String(result);
             }
-        }
         val.clone()
     });
 
@@ -192,8 +190,8 @@ fn render_internal(template: &str, context: Value) -> Response {
             
             // Register custom filters
             engine.add_filter("diff_for_humans", |val: &Value, _args: &[Value]| {
-                if let Some(value) = val.as_str() {
-                    if let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
+                if let Some(value) = val.as_str()
+                    && let Ok(dt) = DateTime::<FixedOffset>::parse_from_rfc3339(value) {
                         let now = crate::chrono::Utc::now();
                         let dt_utc = dt.with_timezone(&crate::chrono::Utc);
                         let duration = now.signed_duration_since(dt_utc);
@@ -256,7 +254,6 @@ fn render_internal(template: &str, context: Value) -> Response {
                         };
                         return Value::String(result);
                     }
-                }
                 val.clone()
             });
 

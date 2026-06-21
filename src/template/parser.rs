@@ -116,8 +116,8 @@ impl Parser {
                     let mut else_branch = None;
 
                     while self.pos < self.tokens.len() {
-                        if let Some(Token::BlockStart) = self.peek() {
-                            if let Some(Token::Identifier(ident)) = self.tokens.get(self.pos + 1) {
+                        if let Some(Token::BlockStart) = self.peek()
+                            && let Some(Token::Identifier(ident)) = self.tokens.get(self.pos + 1) {
                                 if ident == "else" {
                                     self.advance(); // consume BlockStart
                                     self.advance(); // consume "else"
@@ -125,13 +125,11 @@ impl Parser {
 
                                     let mut else_nodes = Vec::new();
                                     while self.pos < self.tokens.len() {
-                                        if let Some(Token::BlockStart) = self.peek() {
-                                            if let Some(Token::Identifier(inner_ident)) = self.tokens.get(self.pos + 1) {
-                                                if inner_ident == "endif" {
+                                        if let Some(Token::BlockStart) = self.peek()
+                                            && let Some(Token::Identifier(inner_ident)) = self.tokens.get(self.pos + 1)
+                                                && inner_ident == "endif" {
                                                     break;
                                                 }
-                                            }
-                                        }
                                         if let Some(Token::Text(text)) = self.peek() {
                                             else_nodes.push(Node::Text(text));
                                             self.advance();
@@ -154,7 +152,6 @@ impl Parser {
                                     break;
                                 }
                             }
-                        }
 
                         if let Some(Token::Text(text)) = self.peek() {
                             then_branch.push(Node::Text(text));
@@ -197,16 +194,14 @@ impl Parser {
 
                     let mut body = Vec::new();
                     while self.pos < self.tokens.len() {
-                        if let Some(Token::BlockStart) = self.peek() {
-                            if let Some(Token::Identifier(ident)) = self.tokens.get(self.pos + 1) {
-                                if ident == "endfor" {
+                        if let Some(Token::BlockStart) = self.peek()
+                            && let Some(Token::Identifier(ident)) = self.tokens.get(self.pos + 1)
+                                && ident == "endfor" {
                                     self.advance(); // consume BlockStart
                                     self.advance(); // consume "endfor"
                                     self.expect(Token::BlockEnd)?;
                                     break;
                                 }
-                            }
-                        }
 
                         if let Some(Token::Text(text)) = self.peek() {
                             body.push(Node::Text(text));
@@ -243,23 +238,21 @@ impl Parser {
                 self.advance(); // consume "|"
                 if let Some(Token::Identifier(filter_name)) = self.advance() {
                     let mut args = Vec::new();
-                    if let Some(Token::Operator(paren)) = self.peek() {
-                        if paren == "(" {
+                    if let Some(Token::Operator(paren)) = self.peek()
+                        && paren == "(" {
                             self.advance(); // consume "("
                             while self.pos < self.tokens.len() {
-                                if let Some(Token::Operator(close_paren)) = self.peek() {
-                                    if close_paren == ")" {
+                                if let Some(Token::Operator(close_paren)) = self.peek()
+                                    && close_paren == ")" {
                                         self.advance(); // consume ")"
                                         break;
                                     }
-                                }
                                 args.push(self.parse_expr()?);
                                 if let Some(Token::Comma) = self.peek() {
                                     self.advance();
                                 }
                             }
                         }
-                    }
                     left = Expr::Filter {
                         expr: Box::new(left),
                         filter_name,
@@ -279,8 +272,8 @@ impl Parser {
     fn parse_comparison_expr(&mut self) -> Result<Expr, String> {
         let left = self.parse_primary_expr()?;
 
-        if let Some(Token::Operator(op)) = self.peek() {
-            if op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=" {
+        if let Some(Token::Operator(op)) = self.peek()
+            && (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
                 self.advance(); // consume operator
                 let right = self.parse_primary_expr()?;
                 return Ok(Expr::Comparison {
@@ -289,7 +282,6 @@ impl Parser {
                     right: Box::new(right),
                 });
             }
-        }
 
         Ok(left)
     }

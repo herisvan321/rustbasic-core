@@ -1,5 +1,7 @@
 pub mod logging;
 pub mod security_headers;
+pub mod cors;
+pub mod csrf;
 
 use std::sync::Arc;
 use std::pin::Pin;

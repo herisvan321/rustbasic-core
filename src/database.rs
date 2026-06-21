@@ -319,11 +319,10 @@ impl<'a> QueryBuilder<'a> {
         }
 
         let result = query.execute(&mut *conn).await?;
-        if let Some(id) = result.last_insert_id() {
-            if id != 0 {
+        if let Some(id) = result.last_insert_id()
+            && id != 0 {
                 return Ok(id);
             }
-        }
         
         // Fallback for SQLite when using SQLx Any driver
         if let Ok(row) = sql::query("SELECT last_insert_rowid()").fetch_one(&mut *conn).await {
@@ -465,11 +464,10 @@ fn get_json_value(row: &sql::any::AnyRow, index: usize) -> Value {
         if let Ok(Some(s)) = row.try_get::<Option<String>, _>(index) {
             return Value::String(s);
         }
-        if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index) {
-            if let Ok(s) = String::from_utf8(bytes) {
+        if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index)
+            && let Ok(s) = String::from_utf8(bytes) {
                 return Value::String(s);
             }
-        }
         // If SQLx Any driver fails to decode, return Null instead of throwing/panicking
         return Value::Null;
     }
@@ -481,11 +479,10 @@ fn get_json_value(row: &sql::any::AnyRow, index: usize) -> Value {
         return Value::Number(serde_json::Number::from(i));
     }
 
-    if let Ok(Some(f)) = row.try_get::<Option<f64>, _>(index) {
-        if let Some(num) = serde_json::Number::from_f64(f) {
+    if let Ok(Some(f)) = row.try_get::<Option<f64>, _>(index)
+        && let Some(num) = serde_json::Number::from_f64(f) {
             return Value::Number(num);
         }
-    }
 
     if let Ok(Some(b)) = row.try_get::<Option<bool>, _>(index) {
         return Value::Bool(b);
@@ -495,11 +492,10 @@ fn get_json_value(row: &sql::any::AnyRow, index: usize) -> Value {
         return Value::String(s);
     }
 
-    if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index) {
-        if let Ok(s) = String::from_utf8(bytes) {
+    if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>, _>(index)
+        && let Ok(s) = String::from_utf8(bytes) {
             return Value::String(s);
         }
-    }
 
     Value::Null
 }

@@ -28,19 +28,19 @@ Selamat datang di **RustBasic Core**. Crate ini adalah mesin inti (core engine) 
 # Cargo.toml project Anda
 
 # Hanya SQLite (default - paling ringan)
-rustbasic-core = { version = "0.1" }
+rustbasic-core = { version = "0.0" }
 
 # SQLite + MySQL
-rustbasic-core = { version = "0.1", features = ["mysql"] }
+rustbasic-core = { version = "0.0", features = ["mysql"] }
 
 # SQLite + MySQL + Email
-rustbasic-core = { version = "0.1", features = ["mysql", "mail"] }
+rustbasic-core = { version = "0.0", features = ["mysql", "mail"] }
 
 # SQLite + MySQL + Email + HTTP Client
-rustbasic-core = { version = "0.1", features = ["mysql", "mail", "http-client"] }
+rustbasic-core = { version = "0.0", features = ["mysql", "mail", "http-client"] }
 
 # SQLite bundled (tanpa instalasi libsqlite3 di sistem)
-rustbasic-core = { version = "0.1", features = ["sqlite-bundled"] }
+rustbasic-core = { version = "0.0", features = ["sqlite-bundled"] }
 ```
 
 > ⚠️ Jika `DB_CONNECTION=mysql` di file `.env`, **wajib** aktifkan feature `mysql`, atau server akan panic saat startup.
@@ -56,10 +56,10 @@ rustbasic-core = { version = "0.1", features = ["sqlite-bundled"] }
 # Pilih sesuai kebutuhan database Anda:
 
 # Untuk SQLite:
-rustbasic-core = "0.1"
+rustbasic-core = "0.0"
 
 # Untuk MySQL:
-rustbasic-core = { version = "0.1", features = ["mysql"] }
+rustbasic-core = { version = "0.0", features = ["mysql"] }
 ```
 
 ### B. Memuat Konfigurasi & Menjalankan Server Utama (`src/main.rs`)
@@ -103,7 +103,7 @@ pub async fn handler_transaksi(req: Request) -> impl IntoResponse {
 
 ```toml
 # Aktifkan dulu di Cargo.toml:
-rustbasic-core = { version = "0.1", features = ["http-client"] }
+rustbasic-core = { version = "0.0", features = ["http-client"] }
 ```
 
 ```rust
@@ -119,7 +119,7 @@ let response = Http::get("https://api.example.com/data")
 
 ```toml
 # Aktifkan dulu di Cargo.toml:
-rustbasic-core = { version = "0.1", features = ["mail"] }
+rustbasic-core = { version = "0.0", features = ["mail"] }
 ```
 
 ```rust

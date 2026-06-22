@@ -588,18 +588,11 @@ fn handle_storage_link(cfg: &Config) {
 // ============================================================
 // RUN NATIVE (server --android/--desktop)
 // ============================================================
-fn run_native(run_android: bool, run_desktop: bool) {
-    if run_android {
-        println!("🚀 Memulai RustBasic Android Wrapper (Native implementation)...");
-
-        // 1. Setup environment
-        let home = std::env::var("HOME").unwrap_or_default();
-        let android_home = std::env::var("ANDROID_HOME")
-            .unwrap_or_else(|_| format!("{}/Library/Android/sdk", home));
-        unsafe { std::env::set_var("ANDROID_HOME", &android_home); }
-
+fn setup_java_home() {
+    if std::env::var("JAVA_HOME").is_err() {
         let mut custom_java_home: Option<String> = None;
-        if std::env::consts::OS == "macos" {
+        let os = std::env::consts::OS;
+        if os == "macos" {
             let paths = vec![
                 "/Applications/Android Studio.app/Contents/jbr/Contents/Home",
                 "/Applications/Android Studio.app/Contents/jre/Contents/Home",
@@ -611,7 +604,54 @@ fn run_native(run_android: bool, run_desktop: bool) {
                     break;
                 }
             }
+        } else if os == "windows" {
+            let win_paths = [
+                "C:\\Program Files\\Android\\Android Studio\\jbr",
+                "C:\\Program Files\\Android\\Android Studio\\jre",
+            ];
+            for path in &win_paths {
+                if std::path::Path::new(path).exists() {
+                    custom_java_home = Some(path.to_string());
+                    break;
+                }
+            }
+        } else {
+            // Linux & other Unix-like OS
+            let unix_paths = [
+                "/opt/android-studio/jbr",
+                "/opt/android-studio/jre",
+                "/snap/android-studio/current/jbr",
+                "/snap/android-studio/current/jre",
+                "/usr/local/android-studio/jbr",
+                "/usr/local/android-studio/jre",
+                "/usr/lib/jvm/default-java",
+            ];
+            for path in &unix_paths {
+                if std::path::Path::new(path).exists() {
+                    custom_java_home = Some(path.to_string());
+                    break;
+                }
+            }
         }
+        if let Some(jh) = custom_java_home {
+            unsafe {
+                std::env::set_var("JAVA_HOME", &jh);
+            }
+        }
+    }
+}
+
+fn run_native(run_android: bool, run_desktop: bool) {
+    if run_android {
+        println!("🚀 Memulai RustBasic Android Wrapper (Native implementation)...");
+
+        // 1. Setup environment
+        let home = std::env::var("HOME").unwrap_or_default();
+        let android_home = std::env::var("ANDROID_HOME")
+            .unwrap_or_else(|_| format!("{}/Library/Android/sdk", home));
+        unsafe { std::env::set_var("ANDROID_HOME", &android_home); }
+
+        setup_java_home();
 
         let mut devices = get_adb_devices();
         if devices.is_empty() {
@@ -676,7 +716,7 @@ fn run_native(run_android: bool, run_desktop: bool) {
         gradle_cmd.arg("assembleDebug");
         gradle_cmd.current_dir("native/android");
 
-        if let Some(jh) = &custom_java_home {
+        if let Ok(jh) = std::env::var("JAVA_HOME") {
             gradle_cmd.env("JAVA_HOME", jh);
         }
 
@@ -724,7 +764,7 @@ fn run_native(run_android: bool, run_desktop: bool) {
     } else if run_desktop {
         println!("🚀 Memulai RustBasic Desktop Wrapper...");
         let mut cmd = std::process::Command::new("cargo");
-        cmd.args(["run", "--bin", "rustbasic-desktop"]);
+        cmd.args(["run", "--bin", "rustbasic-desktop", "--features", "desktop"]);
         let status = cmd.status();
         match status {
             Ok(s) if s.success() => {}
@@ -1016,7 +1056,117 @@ async fn build_docker_image(custom_tag: &str, platform: &str) {
         return;
     }
 
-    let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "rustbasic".to_string()).to_lowercase();
+    let dockerfile_path = std::path::Path::new("Dockerfile");
+    if !dockerfile_path.exists() {
+        println!("📝 Membuat Dockerfile...");
+        let is_monorepo = std::path::Path::new("../rustbasic-core").exists() || std::path::Path::new("rustbasic-core").exists();
+        let binary_name = get_cargo_package_name();
+
+        let dockerfile_content = if is_monorepo {
+            r#"# ============================================================
+# RustBasic Docker Build — Multi-stage
+# ============================================================
+
+# Stage 1: Builder
+FROM rust:1-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy rustbasic-core (dari konteks workspace root)
+COPY rustbasic-core /build/rustbasic-core
+
+# Copy proyek utama rustbasic
+COPY rustbasic /build/rustbasic
+
+WORKDIR /build/rustbasic
+
+# Build release binary
+RUN cargo build --release --bin rustbasic
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary dari builder stage
+COPY --from=builder /build/rustbasic/target/release/rustbasic .
+
+# Copy assets yang diperlukan dari builder stage (lebih aman dan bersih)
+COPY --from=builder /build/rustbasic/src/resources/views/ src/resources/views/
+COPY --from=builder /build/rustbasic/src/dist/ src/dist/
+COPY --from=builder /build/public/ public/
+COPY --from=builder /build/database/migrations/ database/migrations/
+COPY --from=builder /build/database/seeders/ database/seeders/
+COPY --from=builder /build/.env.example .env
+
+# Expose port aplikasi
+EXPOSE 4000
+
+CMD ["./rustbasic"]
+"#.to_string()
+        } else {
+            format!(r#"# ============================================================
+# RustBasic Docker Build — Multi-stage
+# ============================================================
+
+# Stage 1: Builder
+FROM rust:1-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy proyek utama
+COPY . .
+
+# Build release binary
+RUN cargo build --release --bin {bin_name}
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary dari builder stage
+COPY --from=builder /build/target/release/{bin_name} .
+
+# Copy assets yang diperlukan dari builder stage
+COPY --from=builder /build/src/resources/views/ src/resources/views/
+COPY --from=builder /build/src/dist/ src/dist/
+COPY --from=builder /build/public/ public/
+COPY --from=builder /build/database/migrations/ database/migrations/
+COPY --from=builder /build/database/seeders/ database/seeders/
+COPY --from=builder /build/.env.example .env
+
+# Expose port aplikasi
+EXPOSE 4000
+
+CMD ["./{bin_name}"]
+"#, bin_name = binary_name)
+        };
+
+        if let Err(e) = std::fs::write(dockerfile_path, dockerfile_content) {
+            println!("❌ Gagal membuat Dockerfile: {}", e);
+            return;
+        }
+        println!("✅ Dockerfile berhasil dibuat.");
+    }
+
+    let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| get_cargo_package_name()).to_lowercase();
     let image_tag = if custom_tag.is_empty() { format!("{}:latest", app_name) } else { custom_tag.to_string() };
 
     if std::path::Path::new("package.json").exists() {
@@ -1103,6 +1253,7 @@ async fn build_desktop_binary(args: &[String], mut release_mode: bool) {
                 "macos-intel"   => "x86_64-apple-darwin",
                 "macos-silicon" => "aarch64-apple-darwin",
                 "windows"       => "x86_64-pc-windows-msvc",
+                "windows-gnu"   => "x86_64-pc-windows-gnu",
                 "linux"         => "x86_64-unknown-linux-gnu",
                 _               => "",
             };
@@ -1111,12 +1262,18 @@ async fn build_desktop_binary(args: &[String], mut release_mode: bool) {
 
     if target_triple.is_empty() && !args.iter().any(|a| a.starts_with("--os")) {
         println!("\nPilih OS Target Desktop:");
-        println!("  [1] Current OS\n  [2] macOS Intel\n  [3] macOS Apple Silicon\n  [4] Windows\n  [5] Linux");
-        match prompt_choice("👉 Pilih (1-5): ", 1, 5) {
+        println!("  [1] Current OS");
+        println!("  [2] macOS Intel (x86_64-apple-darwin)");
+        println!("  [3] macOS Apple Silicon (aarch64-apple-darwin)");
+        println!("  [4] Windows MSVC (x86_64-pc-windows-msvc)");
+        println!("  [5] Windows GNU (x86_64-pc-windows-gnu - Rekomendasi Cross-compile dari macOS/Linux)");
+        println!("  [6] Linux (x86_64-unknown-linux-gnu)");
+        match prompt_choice("👉 Pilih (1-6): ", 1, 6) {
             2 => target_triple = "x86_64-apple-darwin",
             3 => target_triple = "aarch64-apple-darwin",
             4 => target_triple = "x86_64-pc-windows-msvc",
-            5 => target_triple = "x86_64-unknown-linux-gnu",
+            5 => target_triple = "x86_64-pc-windows-gnu",
+            6 => target_triple = "x86_64-unknown-linux-gnu",
             _ => {}
         }
     }
@@ -1126,7 +1283,7 @@ async fn build_desktop_binary(args: &[String], mut release_mode: bool) {
         if prompt_choice("👉 Mode (1-2): ", 1, 2) == 2 { release_mode = true; }
     }
 
-    let mut build_args = vec!["build", "--bin", "rustbasic-desktop"];
+    let mut build_args = vec!["build", "--bin", "rustbasic-desktop", "--features", "desktop"];
     if release_mode   { build_args.push("--release"); }
     if !target_triple.is_empty() {
         build_args.push("--target");
@@ -1175,6 +1332,8 @@ async fn build_android_apk(args: &[String], target_type: &str, mut release_mode:
         .unwrap_or_else(|_| format!("{}/Library/Android/sdk", home));
     unsafe { std::env::set_var("ANDROID_HOME", &android_home); }
 
+    setup_java_home();
+
     let gradle_task = match (is_aab, release_mode) {
         (false, false) => "assembleDebug",
         (false, true)  => "assembleRelease",
@@ -1184,13 +1343,18 @@ async fn build_android_apk(args: &[String], target_type: &str, mut release_mode:
 
     println!("\n🔨 Gradle task: {}", gradle_task);
     let gradlew = if std::path::Path::new("native/android/gradlew").exists() { "./gradlew" } else { "gradle" };
-    let mut cmd = std::process::Command::new(gradlew)
-        .arg(gradle_task)
-        .current_dir("native/android")
-        .stdin(std::process::Stdio::inherit()).stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
-        .spawn().expect("Gagal menjalankan Gradle");
+    let mut cmd = std::process::Command::new(gradlew);
+    cmd.arg(gradle_task)
+        .current_dir("native/android");
 
-    if cmd.wait().map(|s| s.success()).unwrap_or(false) {
+    if let Ok(jh) = std::env::var("JAVA_HOME") {
+        cmd.env("JAVA_HOME", jh);
+    }
+
+    cmd.stdin(std::process::Stdio::inherit()).stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit());
+    let mut child = cmd.spawn().expect("Gagal menjalankan Gradle");
+
+    if child.wait().map(|s| s.success()).unwrap_or(false) {
         println!("\n✅ Android build selesai!");
     } else {
         println!("\n❌ Android build gagal.");
@@ -1529,5 +1693,21 @@ pub const STORAGE_SOURCE: &str = "storage/app/public";
             println!("💡 Target yang didukung: cors, csrf, app");
         }
     }
+}
+
+fn get_cargo_package_name() -> String {
+    if let Ok(content) = std::fs::read_to_string("Cargo.toml") {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("name =") || trimmed.starts_with("name=") {
+                let parts: Vec<&str> = trimmed.split('=').collect();
+                if parts.len() > 1 {
+                    let name = parts[1].trim().trim_matches('"').trim_matches('\'');
+                    return name.to_string();
+                }
+            }
+        }
+    }
+    "rustbasic".to_string()
 }
 

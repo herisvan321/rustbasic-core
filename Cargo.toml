@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.1.27"
+version = "0.0.30"
 build = "build.rs"
 autolib = false
 autobins = false
@@ -89,7 +89,7 @@ optional = true
 
 [dependencies.rustbasic-core-macro]
 path = "macro"
-version = "0.1.1"
+version = "0.0"
 
 [dependencies.jsonwebtoken]
 version = "9.3.0"

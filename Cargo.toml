@@ -12,7 +12,7 @@
 [package]
 edition = "2024"
 name = "rustbasic-core"
-version = "0.0.30"
+version = "0.0.31"
 build = "build.rs"
 autolib = false
 autobins = false

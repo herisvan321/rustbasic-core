@@ -1027,6 +1027,7 @@ pub async fn handle_build(args: &[String]) {
     }
 
     if build_docker {
+        let mut extract = args.iter().any(|a| a == "--extract" || a == "-e");
         if docker_platform.is_empty() {
             println!("\nPilih Platform Target CPU Docker:");
             println!("  [1] Current Host Platform (Sesuai OS komputer Anda)");
@@ -1038,7 +1039,35 @@ pub async fn handle_build(args: &[String]) {
                 _ => {}
             }
         }
-        build_docker_image(&docker_tag, &docker_platform).await;
+
+        // Peringatan Arsitektur CPU Mismatch
+        let host_arch = std::env::consts::ARCH;
+        let is_mismatch = (host_arch == "aarch64" && docker_platform == "linux/amd64")
+            || (host_arch == "x86_64" && docker_platform == "linux/arm64");
+
+        if is_mismatch {
+            println!("\n⚠️  {}", "PERINGATAN: Arsitektur CPU Mismatch (Sangat Lambat)".yellow().bold());
+            println!("   Anda berada di host dengan CPU '{}' tetapi memilih target Docker '{}'.", host_arch, docker_platform);
+            println!("   Docker akan menggunakan emulasi CPU (QEMU) yang membuat proses kompilasi");
+            println!("   Rust berjalan {} (bisa memakan waktu 10-30 menit).", "10x-20x LEBIH LAMBAT".red().bold());
+            println!("   ");
+            println!("   💡 {} Kami telah mengaktifkan target caching untuk mempercepat build.", "TIPS:".cyan().bold());
+            println!("      Build pertama tetap lambat, namun build berikutnya akan sangat cepat (1-2 menit)");
+            println!("      karena target directory dan dependency cache disimpan oleh Docker.");
+            println!("   ");
+            let proceed = prompt_string("👉 Apakah Anda ingin melanjutkan proses build? (y/n) [default: y]: ", "y");
+            if !proceed.to_lowercase().starts_with('y') {
+                println!("❌ Build dibatalkan oleh pengguna.");
+                return;
+            }
+        }
+
+        if !extract && !args.iter().any(|a| a == "--docker") {
+            let extract_choice = prompt_string("\n👉 Apakah Anda ingin mengekstrak biner Linux hasil build ke folder './build-output'? (y/n) [default: n]: ", "n");
+            extract = extract_choice.to_lowercase().starts_with('y');
+        }
+
+        build_docker_image(&docker_tag, &docker_platform, extract).await;
     } else if build_desktop {
         build_desktop_binary(args, release_mode).await;
     } else if build_android {
@@ -1046,7 +1075,7 @@ pub async fn handle_build(args: &[String]) {
     }
 }
 
-async fn build_docker_image(custom_tag: &str, platform: &str) {
+async fn build_docker_image(custom_tag: &str, platform: &str, extract_binary: bool) {
     // Cek Docker tersedia
     if !std::process::Command::new("docker").arg("version")
         .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
@@ -1064,28 +1093,32 @@ async fn build_docker_image(custom_tag: &str, platform: &str) {
 
         let dockerfile_content = if is_monorepo {
             r#"# ============================================================
-# RustBasic Docker Build — Multi-stage
+# RustBasic Docker Build — Standalone (Cached)
 # ============================================================
 
 # Stage 1: Builder
 FROM rust:1-slim-bookworm AS builder
 
-RUN apt-get update && apt-get install -y \
-    pkg-config libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y \
+    pkg-config libssl-dev
 
 # Copy rustbasic-core (dari konteks workspace root)
-COPY rustbasic-core /build/rustbasic-core
+WORKDIR /rustbasic-core
+COPY --from=core . .
 
 # Copy proyek utama rustbasic
-COPY rustbasic /build/rustbasic
+WORKDIR /build
+COPY . .
 
-WORKDIR /build/rustbasic
-
-# Build release binary
-RUN cargo build --release --bin rustbasic
+# Build release binary using Cargo registry, git cache, and target cache
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/build/target \
+    cargo build --release --bin rustbasic && \
+    cp target/release/rustbasic /build/rustbasic-bin
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
@@ -1097,14 +1130,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy binary dari builder stage
-COPY --from=builder /build/rustbasic/target/release/rustbasic .
+COPY --from=builder /build/rustbasic-bin ./rustbasic
 
 # Copy assets yang diperlukan dari builder stage (lebih aman dan bersih)
-COPY --from=builder /build/rustbasic/src/resources/views/ src/resources/views/
-COPY --from=builder /build/rustbasic/src/dist/ src/dist/
+COPY --from=builder /build/src/resources/views/ src/resources/views/
+COPY --from=builder /build/src/dist/ src/dist/
 COPY --from=builder /build/public/ public/
-COPY --from=builder /build/database/migrations/ database/migrations/
-COPY --from=builder /build/database/seeders/ database/seeders/
+COPY --from=builder /build/database/ database/
 COPY --from=builder /build/.env.example .env
 
 # Expose port aplikasi
@@ -1114,23 +1146,28 @@ CMD ["./rustbasic"]
 "#.to_string()
         } else {
             format!(r#"# ============================================================
-# RustBasic Docker Build — Multi-stage
+# RustBasic Docker Build — Standalone (Cached)
 # ============================================================
 
 # Stage 1: Builder
 FROM rust:1-slim-bookworm AS builder
 
-RUN apt-get update && apt-get install -y \
-    pkg-config libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y \
+    pkg-config libssl-dev
 
 WORKDIR /build
 
-# Copy proyek utama
 COPY . .
 
-# Build release binary
-RUN cargo build --release --bin {bin_name}
+# Build release binary using Cargo registry, git cache, and target cache
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/build/target \
+    cargo build --release --bin {bin_name} && \
+    cp target/release/{bin_name} /build/{bin_name}-bin
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
@@ -1142,14 +1179,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy binary dari builder stage
-COPY --from=builder /build/target/release/{bin_name} .
+COPY --from=builder /build/{bin_name}-bin ./{bin_name}
 
 # Copy assets yang diperlukan dari builder stage
 COPY --from=builder /build/src/resources/views/ src/resources/views/
 COPY --from=builder /build/src/dist/ src/dist/
 COPY --from=builder /build/public/ public/
-COPY --from=builder /build/database/migrations/ database/migrations/
-COPY --from=builder /build/database/seeders/ database/seeders/
+COPY --from=builder /build/database/ database/
 COPY --from=builder /build/.env.example .env
 
 # Expose port aplikasi
@@ -1227,6 +1263,46 @@ CMD ["./{bin_name}"]
 
     if success {
         println!("\n✅ Docker build selesai! Image: {}", image_tag);
+
+        if extract_binary {
+            println!("📦 Mengekstrak biner Linux dari image Docker...");
+            let container_name = format!("temp-extract-{}", std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs());
+            
+            // docker create
+            let create_res = std::process::Command::new("docker")
+                .args(["create", "--name", &container_name, &image_tag])
+                .status();
+
+            if create_res.is_ok() && create_res.unwrap().success() {
+                // create build-output directory
+                let _ = std::fs::create_dir_all("build-output");
+                
+                // Get cargo package name (which is the binary name inside container)
+                let binary_name = get_cargo_package_name();
+
+                // docker cp
+                let cp_status = std::process::Command::new("docker")
+                    .args(["cp", &format!("{}:/app/{}", container_name, binary_name), &format!("build-output/{}", binary_name)])
+                    .status();
+                    
+                // docker rm
+                let _ = std::process::Command::new("docker")
+                    .args(["rm", &container_name])
+                    .status();
+                    
+                if cp_status.is_ok() && cp_status.unwrap().success() {
+                    println!("✅ Biner berhasil diekstrak ke: {}", format!("build-output/{}", binary_name).cyan().bold());
+                } else {
+                    println!("❌ Gagal mengekstrak biner dari container.");
+                }
+            } else {
+                println!("❌ Gagal membuat temporary container untuk ekstraksi.");
+            }
+        }
+
         println!("   Jalankan container (Lokal/Development):");
         if !platform.is_empty() {
             println!("   docker run --platform {} -p 4000:4000 --env-file .env {}", platform, image_tag);

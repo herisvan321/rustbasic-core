@@ -3172,7 +3172,7 @@ dependencies = [
 
 [[package]]
 name = "rustbasic-core"
-version = "0.0.30"
+version = "0.0.31"
 dependencies = [
  "futures-util",
  "http 1.4.2",

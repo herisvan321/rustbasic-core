@@ -1041,7 +1041,7 @@ pub async fn handle_build(args: &[String]) {
         }
 
         // Peringatan Arsitektur CPU Mismatch
-        let host_arch = std::env::consts::ARCH;
+        let host_arch = get_host_arch();
         let is_mismatch = (host_arch == "aarch64" && docker_platform == "linux/amd64")
             || (host_arch == "x86_64" && docker_platform == "linux/arm64");
 
@@ -1238,6 +1238,7 @@ CMD ["./{bin_name}"]
         "build".to_string(),
         "--build-context".to_string(),
         core_context,
+        "--progress=plain".to_string(),
     ];
     
     if !platform.is_empty() {
@@ -1785,5 +1786,44 @@ fn get_cargo_package_name() -> String {
         }
     }
     "rustbasic".to_string()
+}
+
+fn get_host_arch() -> String {
+    // 1. Coba deteksi via command 'uname -m' (macOS / Linux)
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
+        if let Ok(output) = std::process::Command::new("uname").arg("-m").output() {
+            let arch = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+            if !arch.is_empty() {
+                if arch.contains("aarch64") || arch.contains("arm64") {
+                    return "aarch64".to_string();
+                } else if arch.contains("x86_64") || arch.contains("amd64") {
+                    return "x86_64".to_string();
+                }
+                return arch;
+            }
+        }
+    }
+
+    // 2. Coba deteksi via environment variable (Windows)
+    if cfg!(target_os = "windows") {
+        if let Ok(arch) = std::env::var("PROCESSOR_ARCHITECTURE") {
+            let arch_lower = arch.to_lowercase();
+            if arch_lower.contains("amd64") || arch_lower.contains("x64") {
+                return "x86_64".to_string();
+            } else if arch_lower.contains("arm64") {
+                return "aarch64".to_string();
+            }
+        }
+    }
+
+    // 3. Fallback ke compile-time constant
+    let const_arch = std::env::consts::ARCH;
+    if const_arch == "x86_64" {
+        "x86_64".to_string()
+    } else if const_arch == "aarch64" {
+        "aarch64".to_string()
+    } else {
+        const_arch.to_string()
+    }
 }
 
